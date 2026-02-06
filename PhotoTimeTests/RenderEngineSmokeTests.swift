@@ -82,6 +82,9 @@ struct RenderEngineSmokeTests {
 
         let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
         let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("[run:"))
+        #expect(logText.contains("run id: "))
+        #expect(logText.contains("input summary: "))
         #expect(logText.contains("settings output="))
         #expect(logText.contains("timing totals"))
         #expect(logText.contains("stageMs(load="))
@@ -126,6 +129,11 @@ struct RenderEngineSmokeTests {
     @Test
     func exportPipelineStressReport() async throws {
         var runs: [StressRunResult] = []
+        let reportDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeStressReports", isDirectory: true)
+        try FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let reportURL = reportDir.appendingPathComponent("latest-stress-report.json")
+        let previousReport = try Self.loadStressReport(at: reportURL)
 
         for imageCount in Self.stressCounts {
             for attempt in 1...Self.stressRepeats {
@@ -151,17 +159,18 @@ struct RenderEngineSmokeTests {
             )
         }
 
+        let comparisons = Self.makeComparisons(current: summaries, previous: previousReport?.summaries ?? [])
         let report = StressReport(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
             repeatsPerCount: Self.stressRepeats,
             runs: runs,
-            summaries: summaries
+            summaries: summaries,
+            comparisonToPrevious: StressComparison(
+                previousGeneratedAt: previousReport?.generatedAt,
+                summaries: comparisons
+            )
         )
 
-        let reportDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("PhotoTimeStressReports", isDirectory: true)
-        try FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
-        let reportURL = reportDir.appendingPathComponent("latest-stress-report.json")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(report)
@@ -170,6 +179,8 @@ struct RenderEngineSmokeTests {
         let reportText = String(decoding: data, as: UTF8.self)
         print("Stress report path: \(reportURL.path)")
         print(reportText)
+        print(Self.humanReadableSummary(summaries))
+        print(Self.humanReadableComparison(comparisons, previousGeneratedAt: previousReport?.generatedAt))
 
         #expect(FileManager.default.fileExists(atPath: reportURL.path))
         #expect(!runs.isEmpty)
@@ -310,6 +321,71 @@ struct RenderEngineSmokeTests {
         let index = max(0, min(position, sorted.count - 1))
         return sorted[index]
     }
+
+    private static func humanReadableSummary(_ summaries: [StressSummary]) -> String {
+        let header = "Stress Summary (ms): count | elapsed avg/p95 | wall avg/p95"
+        let lines = summaries
+            .sorted { $0.imageCount < $1.imageCount }
+            .map {
+                String(
+                    format: "%3d | %8.1f / %8.1f | %8.1f / %8.1f",
+                    $0.imageCount,
+                    $0.elapsedAvgMs,
+                    $0.elapsedP95Ms,
+                    $0.wallAvgMs,
+                    $0.wallP95Ms
+                )
+            }
+        return ([header] + lines).joined(separator: "\n")
+    }
+
+    private static func humanReadableComparison(_ comparisons: [StressSummaryComparison], previousGeneratedAt: String?) -> String {
+        guard !comparisons.isEmpty else {
+            return "Stress Delta (%): no previous report found"
+        }
+
+        let previous = previousGeneratedAt ?? "unknown"
+        let header = "Stress Delta (% vs previous @ \(previous)): count | elapsed avg/p95 | wall avg/p95"
+        let lines = comparisons
+            .sorted { $0.imageCount < $1.imageCount }
+            .map {
+                String(
+                    format: "%3d | %+8.2f / %+8.2f | %+8.2f / %+8.2f",
+                    $0.imageCount,
+                    $0.elapsedAvgChangePercent,
+                    $0.elapsedP95ChangePercent,
+                    $0.wallAvgChangePercent,
+                    $0.wallP95ChangePercent
+                )
+            }
+        return ([header] + lines).joined(separator: "\n")
+    }
+
+    private static func loadStressReport(at url: URL) throws -> StressReport? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        return try decoder.decode(StressReport.self, from: data)
+    }
+
+    private static func makeComparisons(current: [StressSummary], previous: [StressSummary]) -> [StressSummaryComparison] {
+        let previousByCount = Dictionary(uniqueKeysWithValues: previous.map { ($0.imageCount, $0) })
+        return current.compactMap { currentSummary in
+            guard let previousSummary = previousByCount[currentSummary.imageCount] else { return nil }
+            return StressSummaryComparison(
+                imageCount: currentSummary.imageCount,
+                elapsedAvgChangePercent: percentChange(current: currentSummary.elapsedAvgMs, previous: previousSummary.elapsedAvgMs),
+                elapsedP95ChangePercent: percentChange(current: currentSummary.elapsedP95Ms, previous: previousSummary.elapsedP95Ms),
+                wallAvgChangePercent: percentChange(current: currentSummary.wallAvgMs, previous: previousSummary.wallAvgMs),
+                wallP95ChangePercent: percentChange(current: currentSummary.wallP95Ms, previous: previousSummary.wallP95Ms)
+            )
+        }
+    }
+
+    private static func percentChange(current: Double, previous: Double) -> Double {
+        guard previous != 0 else { return 0 }
+        return ((current - previous) / previous) * 100
+    }
 }
 
 private struct TimingTotals: Codable {
@@ -340,4 +416,18 @@ private struct StressReport: Codable {
     let repeatsPerCount: Int
     let runs: [StressRunResult]
     let summaries: [StressSummary]
+    let comparisonToPrevious: StressComparison?
+}
+
+private struct StressComparison: Codable {
+    let previousGeneratedAt: String?
+    let summaries: [StressSummaryComparison]
+}
+
+private struct StressSummaryComparison: Codable {
+    let imageCount: Int
+    let elapsedAvgChangePercent: Double
+    let elapsedP95ChangePercent: Double
+    let wallAvgChangePercent: Double
+    let wallP95ChangePercent: Double
 }

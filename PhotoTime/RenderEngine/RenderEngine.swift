@@ -1,6 +1,7 @@
 import Foundation
 import CoreImage
 import CoreGraphics
+import ImageIO
 
 enum RenderEngineError: LocalizedError {
     case emptyInput
@@ -63,9 +64,12 @@ final class RenderEngine {
         let logURL = outputURL
             .deletingPathExtension()
             .appendingPathExtension("render.log")
-        let logger = RenderLogger(fileURL: logURL)
+        let runID = UUID().uuidString
+        let logger = RenderLogger(fileURL: logURL, runID: runID)
         await logger.log("start export")
+        await logger.log("run id: \(runID)")
         await logger.log("input count: \(imageURLs.count)")
+        await logger.log("input summary: \(Self.makeInputSummary(urls: imageURLs))")
         await logger.log("output: \(outputURL.path)")
         await logger.log(
             String(
@@ -178,5 +182,67 @@ final class RenderEngine {
         } catch {
             await logger.log("cleanup failed: \(error.localizedDescription)")
         }
+    }
+
+    nonisolated private static func makeInputSummary(urls: [URL]) -> String {
+        var extensionCounts: [String: Int] = [:]
+        var totalBytes: UInt64 = 0
+        var widthMin = Int.max
+        var widthMax = 0
+        var heightMin = Int.max
+        var heightMax = 0
+        var dimensionCount = 0
+
+        for url in urls {
+            let ext = url.pathExtension.lowercased()
+            extensionCounts[ext.isEmpty ? "(none)" : ext, default: 0] += 1
+
+            if
+                let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+                let fileSize = values.fileSize,
+                fileSize > 0
+            {
+                totalBytes += UInt64(fileSize)
+            }
+
+            guard
+                let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                let width = properties[kCGImagePropertyPixelWidth] as? Int,
+                let height = properties[kCGImagePropertyPixelHeight] as? Int,
+                width > 0,
+                height > 0
+            else {
+                continue
+            }
+
+            dimensionCount += 1
+            widthMin = min(widthMin, width)
+            widthMax = max(widthMax, width)
+            heightMin = min(heightMin, height)
+            heightMax = max(heightMax, height)
+        }
+
+        let extensionSummary = extensionCounts
+            .sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
+
+        let dimensionsSummary: String
+        if dimensionCount > 0 {
+            dimensionsSummary = "\(widthMin)x\(heightMin)-\(widthMax)x\(heightMax)"
+        } else {
+            dimensionsSummary = "unknown"
+        }
+
+        let totalMB = Double(totalBytes) / 1_048_576.0
+        return String(
+            format: "formats={%@} dimensions=%@ sampled=%d/%d totalBytes=%.2fMB",
+            extensionSummary,
+            dimensionsSummary,
+            dimensionCount,
+            urls.count,
+            totalMB
+        )
     }
 }

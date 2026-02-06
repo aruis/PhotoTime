@@ -46,6 +46,52 @@ final class ExportViewModel: ObservableObject {
         statusMessage = "导出路径: \(url.path)"
     }
 
+    func importTemplate() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let template = try JSONDecoder().decode(RenderTemplate.self, from: data)
+            guard template.schemaVersion == RenderTemplate.currentSchemaVersion else {
+                statusMessage = "模板版本不支持: v\(template.schemaVersion)"
+                return
+            }
+            apply(template: template)
+            statusMessage = "已导入模板: \(url.lastPathComponent)"
+        } catch {
+            statusMessage = "模板导入失败: \(error.localizedDescription)"
+        }
+    }
+
+    func exportTemplate() {
+        guard isSettingsValid else {
+            statusMessage = invalidSettingsMessage ?? "参数无效"
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "PhotoTime-Template-v\(RenderTemplate.currentSchemaVersion).json"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let template = makeSettings().template
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(template)
+            try data.write(to: url, options: .atomic)
+            statusMessage = "模板已保存: \(url.path)"
+        } catch {
+            statusMessage = "模板保存失败: \(error.localizedDescription)"
+        }
+    }
+
     func export() {
         guard !isExporting else { return }
         guard !imageURLs.isEmpty else {
@@ -183,6 +229,22 @@ final class ExportViewModel: ObservableObject {
         )
     }
 
+    private func apply(template: RenderTemplate) {
+        let settings = RenderSettings(template: template)
+        outputWidth = min(max(Int(settings.outputSize.width.rounded()), 640), 3840)
+        outputHeight = min(max(Int(settings.outputSize.height.rounded()), 360), 2160)
+        fps = min(max(Int(settings.fps), 1), 60)
+        imageDuration = min(max(settings.imageDuration, 0.2), 10.0)
+        transitionDuration = min(max(settings.transitionDuration, 0), 2.0)
+        if transitionDuration >= imageDuration {
+            transitionDuration = max(0, imageDuration - 0.05)
+        }
+        enableKenBurns = settings.enableKenBurns
+        prefetchRadius = min(max(settings.prefetchRadius, 0), 4)
+        prefetchMaxConcurrent = min(max(settings.prefetchMaxConcurrent, 1), 8)
+        previewSecond = min(previewSecond, previewMaxSecond)
+    }
+
     var previewMaxSecond: Double {
         guard !imageURLs.isEmpty else { return 0 }
         let settings = makeSettings()
@@ -215,6 +277,10 @@ struct ContentView: View {
                 Button("选择图片") { viewModel.chooseImages() }
                     .disabled(viewModel.isExporting)
                 Button("选择导出路径") { viewModel.chooseOutput() }
+                    .disabled(viewModel.isExporting)
+                Button("导入模板") { viewModel.importTemplate() }
+                    .disabled(viewModel.isExporting)
+                Button("保存模板") { viewModel.exportTemplate() }
                     .disabled(viewModel.isExporting)
                 Button("生成预览") { viewModel.generatePreview() }
                     .disabled(viewModel.isExporting)
