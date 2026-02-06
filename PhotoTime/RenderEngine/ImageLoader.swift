@@ -14,11 +14,11 @@ enum ImageLoaderError: LocalizedError {
 }
 
 enum ImageLoader {
-    nonisolated static func load(urls: [URL]) throws -> [RenderAsset] {
-        try urls.map(load(url:))
+    nonisolated static func load(urls: [URL], targetMaxDimension: Int) throws -> [RenderAsset] {
+        try urls.map { try load(url: $0, targetMaxDimension: targetMaxDimension) }
     }
 
-    nonisolated static func load(url: URL) throws -> RenderAsset {
+    nonisolated static func load(url: URL, targetMaxDimension: Int) throws -> RenderAsset {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ImageLoaderError.unsupportedImage(url)
         }
@@ -27,9 +27,15 @@ enum ImageLoader {
             throw ImageLoaderError.unsupportedImage(url)
         }
 
-        guard var image = CIImage(contentsOf: url, options: [
-            .applyOrientationProperty: true
-        ]) else {
+        let thumbnailOptions: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: targetMaxDimension,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+
+        guard var image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions as CFDictionary)
+            .map({ CIImage(cgImage: $0) }) else {
             throw ImageLoaderError.unsupportedImage(url)
         }
 

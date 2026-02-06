@@ -24,28 +24,24 @@ final class FrameComposer {
             .cropped(to: layout.paperRect)
     }
 
-    nonisolated func prepareClips(_ assets: [RenderAsset]) -> [ComposedClip] {
-        assets.map { asset in
-            ComposedClip(
-                photoImage: asset.image,
-                textOverlay: makeTextOverlay(text: asset.exif.plateText)
-            )
-        }
+    nonisolated func makeClip(_ asset: RenderAsset) -> ComposedClip {
+        ComposedClip(
+            photoImage: asset.image,
+            textOverlay: makeTextOverlay(text: asset.exif.plateText)
+        )
     }
 
-    nonisolated func composeFrame(clips: [ComposedClip], timelineLayers: [TimelineLayer]) -> CIImage {
+    nonisolated func composeFrame(layerClips: [(TimelineLayer, ComposedClip)]) -> CIImage {
         var frame = paperImage.composited(over: backgroundImage)
 
-        for layer in timelineLayers {
-            let clip = clips[layer.clipIndex]
+        for (layer, clip) in layerClips {
             let photo = makePhotoLayer(image: clip.photoImage, progress: layer.progress, index: layer.clipIndex)
             let alphaPhoto = applyOpacity(photo, opacity: layer.opacity)
             frame = alphaPhoto.composited(over: frame)
         }
 
         // Draw text and frame strokes above the photo.
-        for layer in timelineLayers {
-            let clip = clips[layer.clipIndex]
+        for (layer, clip) in layerClips {
             let alphaOverlay = applyOpacity(clip.textOverlay, opacity: layer.opacity)
             frame = alphaOverlay.composited(over: frame)
         }

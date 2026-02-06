@@ -1,0 +1,343 @@
+import CoreGraphics
+import Foundation
+import ImageIO
+import Testing
+import UniformTypeIdentifiers
+@testable import PhotoTime
+
+@Suite(.serialized)
+struct RenderEngineSmokeTests {
+    private static let stressCounts = [30, 60, 100]
+    private static let stressRepeats = 2
+
+    @Test
+    func previewPipelineProducesImage() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreview-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 3)
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.4,
+            transitionDuration: 0.1,
+            enableKenBurns: false
+        )
+
+        let engine = RenderEngine(settings: settings)
+        let cgImage = try await engine.previewFrame(imageURLs: imageURLs)
+        #expect(cgImage.width == 1280)
+        #expect(cgImage.height == 720)
+    }
+
+    @Test
+    func previewPipelineSupportsSeeking() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreviewSeek-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 5)
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.5,
+            transitionDuration: 0.1,
+            enableKenBurns: false
+        )
+
+        let engine = RenderEngine(settings: settings)
+        let cgImage = try await engine.previewFrame(imageURLs: imageURLs, at: 1.2)
+        #expect(cgImage.width == 1280)
+        #expect(cgImage.height == 720)
+    }
+
+    @Test
+    func exportPipelineProducesVideoFile() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeSmoke-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 6)
+        let outputURL = tempDir.appendingPathComponent("smoke.mp4")
+
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.4,
+            transitionDuration: 0.1,
+            enableKenBurns: false
+        )
+
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+
+        let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        #expect(size > 0)
+
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("settings output="))
+        #expect(logText.contains("timing totals"))
+        #expect(logText.contains("stageMs(load="))
+        #expect(logText.contains("prefetchMaxConcurrent="))
+    }
+
+    @Test(arguments: stressCounts)
+    func exportPipelineStressSequence(imageCount: Int) async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeStress-\(imageCount)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: imageCount)
+        let outputURL = tempDir.appendingPathComponent("stress-\(imageCount).mp4")
+
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 12,
+            imageDuration: 0.10,
+            transitionDuration: 0.04,
+            enableKenBurns: false
+        )
+
+        let start = Date()
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+        let elapsedMs = Date().timeIntervalSince(start) * 1000
+
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+        let size = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.intValue ?? 0
+        #expect(size > 0)
+
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("timing totals"))
+        #expect(logText.contains("stageMs(load="))
+
+        print("Stress \(imageCount) images elapsed=\(String(format: "%.1f", elapsedMs))ms outputBytes=\(size)")
+    }
+
+    @Test
+    func exportPipelineStressReport() async throws {
+        var runs: [StressRunResult] = []
+
+        for imageCount in Self.stressCounts {
+            for attempt in 1...Self.stressRepeats {
+                let run = try await runStressExport(imageCount: imageCount, attempt: attempt)
+                runs.append(run)
+                print(
+                    "Stress report run count=\(imageCount) attempt=\(attempt) elapsed=\(String(format: "%.1f", run.elapsedMs))ms wall=\(String(format: "%.1f", run.timingTotals.wallMs))ms"
+                )
+            }
+        }
+
+        let summaries = Self.stressCounts.map { count -> StressSummary in
+            let matching = runs.filter { $0.imageCount == count }
+            let elapsedSamples = matching.map(\.elapsedMs)
+            let wallSamples = matching.map(\.timingTotals.wallMs)
+            return StressSummary(
+                imageCount: count,
+                runs: matching.count,
+                elapsedAvgMs: Self.average(elapsedSamples),
+                elapsedP95Ms: Self.p95(elapsedSamples),
+                wallAvgMs: Self.average(wallSamples),
+                wallP95Ms: Self.p95(wallSamples)
+            )
+        }
+
+        let report = StressReport(
+            generatedAt: ISO8601DateFormatter().string(from: Date()),
+            repeatsPerCount: Self.stressRepeats,
+            runs: runs,
+            summaries: summaries
+        )
+
+        let reportDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeStressReports", isDirectory: true)
+        try FileManager.default.createDirectory(at: reportDir, withIntermediateDirectories: true)
+        let reportURL = reportDir.appendingPathComponent("latest-stress-report.json")
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(report)
+        try data.write(to: reportURL, options: .atomic)
+
+        let reportText = String(decoding: data, as: UTF8.self)
+        print("Stress report path: \(reportURL.path)")
+        print(reportText)
+
+        #expect(FileManager.default.fileExists(atPath: reportURL.path))
+        #expect(!runs.isEmpty)
+        #expect(summaries.count == Self.stressCounts.count)
+        #expect(summaries.allSatisfy { $0.elapsedAvgMs > 0 && $0.wallAvgMs > 0 })
+    }
+
+    private func makeTestImages(in dir: URL, count: Int) throws -> [URL] {
+        var urls: [URL] = []
+        urls.reserveCapacity(count)
+
+        for index in 0..<count {
+            let url = dir.appendingPathComponent("img-\(index).png")
+            try writeImage(to: url, index: index)
+            urls.append(url)
+        }
+
+        return urls
+    }
+
+    private func writeImage(to url: URL, index: Int) throws {
+        let width = 2400
+        let height = 1600
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 1)
+        }
+
+        let colors: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.15, 0.35, 0.75),
+            (0.75, 0.25, 0.25),
+            (0.18, 0.62, 0.32),
+            (0.78, 0.55, 0.22)
+        ]
+        let color = colors[index % colors.count]
+        context.setFillColor(CGColor(red: color.0, green: color.1, blue: color.2, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+        context.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.35))
+        context.setLineWidth(16)
+        context.stroke(CGRect(x: 80, y: 80, width: width - 160, height: height - 160))
+
+        guard let image = context.makeImage() else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 2)
+        }
+
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 3)
+        }
+
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 4)
+        }
+    }
+
+    private func runStressExport(imageCount: Int, attempt: Int) async throws -> StressRunResult {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeStressReport-\(imageCount)-\(attempt)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: imageCount)
+        let outputURL = tempDir.appendingPathComponent("stress-report-\(imageCount)-\(attempt).mp4")
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 12,
+            imageDuration: 0.10,
+            transitionDuration: 0.04,
+            enableKenBurns: false
+        )
+
+        let start = Date()
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+        let elapsedMs = Date().timeIntervalSince(start) * 1000
+
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("timing totals"))
+        #expect(logText.contains("stageMs(load="))
+
+        let totals = try parseTimingTotals(logText)
+        return StressRunResult(
+            imageCount: imageCount,
+            attempt: attempt,
+            elapsedMs: elapsedMs,
+            timingTotals: totals
+        )
+    }
+
+    private func parseTimingTotals(_ logText: String) throws -> TimingTotals {
+        let pattern = #"timing totals frames=(\d+) wall=([0-9.]+)ms load=([0-9.]+)ms compose=([0-9.]+)ms encode=([0-9.]+)ms"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(logText.startIndex..<logText.endIndex, in: logText)
+        guard let match = regex.matches(in: logText, options: [], range: range).last else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 11, userInfo: [NSLocalizedDescriptionKey: "missing timing totals"])
+        }
+
+        func double(at index: Int) throws -> Double {
+            let captureRange = match.range(at: index)
+            guard
+                captureRange.location != NSNotFound,
+                let swiftRange = Range(captureRange, in: logText),
+                let value = Double(logText[swiftRange])
+            else {
+                throw NSError(domain: "RenderEngineSmokeTests", code: 12, userInfo: [NSLocalizedDescriptionKey: "invalid timing totals capture"])
+            }
+            return value
+        }
+
+        return TimingTotals(
+            wallMs: try double(at: 2),
+            loadMs: try double(at: 3),
+            composeMs: try double(at: 4),
+            encodeMs: try double(at: 5)
+        )
+    }
+
+    private static func average(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private static func p95(_ values: [Double]) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        let position = Int(ceil(Double(sorted.count) * 0.95)) - 1
+        let index = max(0, min(position, sorted.count - 1))
+        return sorted[index]
+    }
+}
+
+private struct TimingTotals: Codable {
+    let wallMs: Double
+    let loadMs: Double
+    let composeMs: Double
+    let encodeMs: Double
+}
+
+private struct StressRunResult: Codable {
+    let imageCount: Int
+    let attempt: Int
+    let elapsedMs: Double
+    let timingTotals: TimingTotals
+}
+
+private struct StressSummary: Codable {
+    let imageCount: Int
+    let runs: Int
+    let elapsedAvgMs: Double
+    let elapsedP95Ms: Double
+    let wallAvgMs: Double
+    let wallP95Ms: Double
+}
+
+private struct StressReport: Codable {
+    let generatedAt: String
+    let repeatsPerCount: Int
+    let runs: [StressRunResult]
+    let summaries: [StressSummary]
+}

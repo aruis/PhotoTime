@@ -1,18 +1,51 @@
 import Foundation
+import CoreImage
+import CoreGraphics
 
 enum RenderEngineError: LocalizedError {
     case emptyInput
+    case cancelled
+    case imageLoadFailed(String)
+    case exportFailed(String)
+    case previewFailed(String)
+
+    var code: String {
+        switch self {
+        case .emptyInput:
+            return "E_INPUT_EMPTY"
+        case .cancelled:
+            return "E_EXPORT_CANCELLED"
+        case .imageLoadFailed:
+            return "E_IMAGE_LOAD"
+        case .exportFailed:
+            return "E_EXPORT_PIPELINE"
+        case .previewFailed:
+            return "E_PREVIEW_PIPELINE"
+        }
+    }
 
     var errorDescription: String? {
         switch self {
         case .emptyInput:
             return "请至少选择一张图片"
+        case .cancelled:
+            return "导出已取消"
+        case .imageLoadFailed(let message):
+            return "图片加载失败: \(message)"
+        case .exportFailed(let message):
+            return "视频导出失败: \(message)"
+        case .previewFailed(let message):
+            return "预览生成失败: \(message)"
         }
     }
 }
 
 final class RenderEngine {
     private let settings: RenderSettings
+    private let previewContext = CIContext(options: [
+        .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any,
+        .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any
+    ])
 
     nonisolated init(settings: RenderSettings = .mvp) {
         self.settings = settings
@@ -27,17 +60,123 @@ final class RenderEngine {
             throw RenderEngineError.emptyInput
         }
 
-        let assets = try ImageLoader.load(urls: imageURLs)
+        let logURL = outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("render.log")
+        let logger = RenderLogger(fileURL: logURL)
+        await logger.log("start export")
+        await logger.log("input count: \(imageURLs.count)")
+        await logger.log("output: \(outputURL.path)")
+        await logger.log(
+            String(
+                format: "settings output=%dx%d fps=%d imageDuration=%.2fs transition=%.2fs kenBurns=%@ prefetchRadius=%d prefetchMaxConcurrent=%d",
+                Int(settings.outputSize.width),
+                Int(settings.outputSize.height),
+                Int(settings.fps),
+                settings.imageDuration,
+                settings.transitionDuration,
+                settings.enableKenBurns ? "on" : "off",
+                settings.prefetchRadius,
+                settings.prefetchMaxConcurrent
+            )
+        )
+        let targetMaxDimension = Int(max(settings.outputSize.width, settings.outputSize.height) * 1.4)
+        await logger.log("decode max dimension: \(targetMaxDimension)")
+        await logger.log("image loading mode: lazy windowed prefetch")
+
         let timeline = TimelineEngine(
-            itemCount: assets.count,
+            itemCount: imageURLs.count,
             imageDuration: settings.imageDuration,
             transitionDuration: settings.transitionDuration
         )
+        await logger.log("timeline total duration: \(timeline.totalDuration)s")
 
         let composer = FrameComposer(settings: settings)
-        let clips = composer.prepareClips(assets)
 
-        let exporter = VideoExporter(settings: settings)
-        try await exporter.export(clips: clips, timeline: timeline, composer: composer, to: outputURL, progress: progress)
+        do {
+            let exporter = VideoExporter(settings: settings)
+            try await exporter.export(
+                sourceURLs: imageURLs,
+                targetMaxDimension: targetMaxDimension,
+                timeline: timeline,
+                composer: composer,
+                to: outputURL,
+                logger: logger,
+                progress: progress
+            )
+            await logger.log("export completed")
+        } catch is CancellationError {
+            await logger.log("export cancelled")
+            await cleanupPartialOutput(at: outputURL, logger: logger)
+            throw RenderEngineError.cancelled
+        } catch VideoExporterError.cancelled {
+            await logger.log("export cancelled")
+            await cleanupPartialOutput(at: outputURL, logger: logger)
+            throw RenderEngineError.cancelled
+        } catch let error as VideoExporterError {
+            await logger.log("export failed: \(error.localizedDescription)")
+            await cleanupPartialOutput(at: outputURL, logger: logger)
+            switch error {
+            case .assetLoadFailed:
+                throw RenderEngineError.imageLoadFailed(error.localizedDescription)
+            default:
+                throw RenderEngineError.exportFailed(error.localizedDescription)
+            }
+        } catch {
+            await logger.log("export failed: \(error.localizedDescription)")
+            await cleanupPartialOutput(at: outputURL, logger: logger)
+            throw RenderEngineError.exportFailed(error.localizedDescription)
+        }
+    }
+
+    nonisolated func previewFrame(imageURLs: [URL], at second: TimeInterval = 0) async throws -> CGImage {
+        guard !imageURLs.isEmpty else {
+            throw RenderEngineError.emptyInput
+        }
+
+        let targetMaxDimension = Int(max(settings.outputSize.width, settings.outputSize.height) * 1.4)
+        let timeline = TimelineEngine(
+            itemCount: imageURLs.count,
+            imageDuration: settings.imageDuration,
+            transitionDuration: settings.transitionDuration
+        )
+        let composer = FrameComposer(settings: settings)
+
+        let clampedSecond = max(0, min(second, max(timeline.totalDuration - 0.001, 0)))
+        let snapshot = timeline.snapshot(at: clampedSecond)
+
+        do {
+            var layerClips: [(TimelineLayer, ComposedClip)] = []
+            layerClips.reserveCapacity(snapshot.layers.count)
+
+            for layer in snapshot.layers {
+                let asset = try ImageLoader.load(url: imageURLs[layer.clipIndex], targetMaxDimension: targetMaxDimension)
+                layerClips.append((layer, composer.makeClip(asset)))
+            }
+
+            let image = composer.composeFrame(layerClips: layerClips)
+            guard let cgImage = previewContext.createCGImage(image, from: CGRect(origin: .zero, size: settings.outputSize)) else {
+                throw RenderEngineError.previewFailed("无法创建预览图像")
+            }
+            return cgImage
+        } catch let error as RenderEngineError {
+            throw error
+        } catch {
+            throw RenderEngineError.previewFailed(error.localizedDescription)
+        }
+    }
+
+    nonisolated private func cleanupPartialOutput(at outputURL: URL, logger: RenderLogger) async {
+        guard FileManager.default.fileExists(atPath: outputURL.path) else {
+            await logger.log("cleanup skipped: no partial file")
+            return
+        }
+
+        do {
+            try FileManager.default.removeItem(at: outputURL)
+            await logger.log("cleanup partial output: removed \(outputURL.lastPathComponent)")
+        } catch {
+            await logger.log("cleanup failed: \(error.localizedDescription)")
+        }
     }
 }

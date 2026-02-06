@@ -8,13 +8,35 @@ struct RenderSettings {
     let imageDuration: TimeInterval
     let transitionDuration: TimeInterval
     let enableKenBurns: Bool
+    let prefetchRadius: Int
+    let prefetchMaxConcurrent: Int
+
+    nonisolated init(
+        outputSize: CGSize,
+        fps: Int32,
+        imageDuration: TimeInterval,
+        transitionDuration: TimeInterval,
+        enableKenBurns: Bool,
+        prefetchRadius: Int = 1,
+        prefetchMaxConcurrent: Int = 2
+    ) {
+        self.outputSize = outputSize
+        self.fps = fps
+        self.imageDuration = imageDuration
+        self.transitionDuration = transitionDuration
+        self.enableKenBurns = enableKenBurns
+        self.prefetchRadius = max(0, prefetchRadius)
+        self.prefetchMaxConcurrent = max(1, prefetchMaxConcurrent)
+    }
 
     nonisolated static let mvp = RenderSettings(
         outputSize: CGSize(width: 1920, height: 1080),
         fps: 30,
         imageDuration: 3.0,
         transitionDuration: 0.6,
-        enableKenBurns: true
+        enableKenBurns: true,
+        prefetchRadius: 1,
+        prefetchMaxConcurrent: 2
     )
 }
 
