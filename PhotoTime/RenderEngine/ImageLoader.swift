@@ -39,10 +39,6 @@ enum ImageLoader {
             throw ImageLoaderError.unsupportedImage(url)
         }
 
-        if let orientationRaw = properties[kCGImagePropertyOrientation] as? UInt32 {
-            image = image.oriented(forExifOrientation: Int32(orientationRaw))
-        }
-
         return RenderAsset(url: url, image: image, exif: ExifParser.parse(from: properties))
     }
 }

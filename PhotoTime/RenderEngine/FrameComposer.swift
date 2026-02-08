@@ -12,15 +12,26 @@ final class FrameComposer {
     private let layout: FrameLayout
     private let backgroundImage: CIImage
     private let paperImage: CIImage
+    private let strokeColor: CGColor
+    private let textColor: NSColor
 
     nonisolated init(settings: RenderSettings) {
         self.settings = settings
-        self.layout = LayoutEngine.makeLayout(outputSize: settings.outputSize)
+        self.layout = LayoutEngine.makeLayout(outputSize: settings.outputSize, settings: settings)
+        self.strokeColor = CGColor(
+            red: CGFloat(settings.canvas.strokeGray),
+            green: CGFloat(settings.canvas.strokeGray),
+            blue: CGFloat(settings.canvas.strokeGray),
+            alpha: 1
+        )
+        self.textColor = NSColor(white: CGFloat(settings.canvas.textGray), alpha: 1)
 
-        backgroundImage = CIImage(color: CIColor(red: 0.09, green: 0.09, blue: 0.1, alpha: 1))
+        let bg = CGFloat(settings.canvas.backgroundGray)
+        backgroundImage = CIImage(color: CIColor(red: bg, green: bg, blue: bg, alpha: 1))
             .cropped(to: layout.canvas)
 
-        paperImage = CIImage(color: CIColor(red: 0.98, green: 0.98, blue: 0.97, alpha: 1))
+        let paper = CGFloat(settings.canvas.paperWhite)
+        paperImage = CIImage(color: CIColor(red: paper, green: paper, blue: paper, alpha: 1))
             .cropped(to: layout.paperRect)
     }
 
@@ -108,7 +119,7 @@ final class FrameComposer {
             return CIImage.empty()
         }
 
-        context.setStrokeColor(CGColor(red: 0.82, green: 0.82, blue: 0.8, alpha: 1))
+        context.setStrokeColor(strokeColor)
         context.setLineWidth(1)
         context.stroke(layout.paperRect)
         context.stroke(layout.photoRect)
@@ -117,15 +128,17 @@ final class FrameComposer {
         paragraph.alignment = .left
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 26, weight: .medium),
-            .foregroundColor: NSColor(white: 0.15, alpha: 1),
+            .font: NSFont.monospacedSystemFont(ofSize: CGFloat(settings.plate.fontSize), weight: .medium),
+            .foregroundColor: textColor,
             .paragraphStyle: paragraph
         ]
 
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-        (text as NSString).draw(in: layout.plateTextRect, withAttributes: attributes)
-        NSGraphicsContext.restoreGraphicsState()
+        if settings.plate.enabled {
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+            (text as NSString).draw(in: layout.plateTextRect, withAttributes: attributes)
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         guard let cgImage = context.makeImage() else {
             return CIImage.empty()

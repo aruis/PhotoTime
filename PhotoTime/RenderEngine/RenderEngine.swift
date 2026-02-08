@@ -7,6 +7,7 @@ enum RenderEngineError: LocalizedError {
     case emptyInput
     case cancelled
     case imageLoadFailed(String)
+    case assetLoadFailed(index: Int, message: String)
     case exportFailed(String)
     case previewFailed(String)
 
@@ -16,7 +17,7 @@ enum RenderEngineError: LocalizedError {
             return "E_INPUT_EMPTY"
         case .cancelled:
             return "E_EXPORT_CANCELLED"
-        case .imageLoadFailed:
+        case .imageLoadFailed, .assetLoadFailed:
             return "E_IMAGE_LOAD"
         case .exportFailed:
             return "E_EXPORT_PIPELINE"
@@ -33,6 +34,8 @@ enum RenderEngineError: LocalizedError {
             return "导出已取消"
         case .imageLoadFailed(let message):
             return "图片加载失败: \(message)"
+        case .assetLoadFailed(let index, let message):
+            return "素材加载失败(index=\(index)): \(message)"
         case .exportFailed(let message):
             return "视频导出失败: \(message)"
         case .previewFailed(let message):
@@ -73,15 +76,33 @@ final class RenderEngine {
         await logger.log("output: \(outputURL.path)")
         await logger.log(
             String(
-                format: "settings output=%dx%d fps=%d imageDuration=%.2fs transition=%.2fs kenBurns=%@ prefetchRadius=%d prefetchMaxConcurrent=%d",
+                format: "settings output=%dx%d fps=%d imageDuration=%.2fs transition=%.2fs(%@) kenBurns=%@ prefetchRadius=%d prefetchMaxConcurrent=%d",
                 Int(settings.outputSize.width),
                 Int(settings.outputSize.height),
                 Int(settings.fps),
                 settings.imageDuration,
                 settings.transitionDuration,
+                settings.transitionEnabled ? settings.transitionStyle.rawValue : "off",
                 settings.enableKenBurns ? "on" : "off",
                 settings.prefetchRadius,
                 settings.prefetchMaxConcurrent
+            )
+        )
+        await logger.log(
+            String(
+                format: "layout h=%.1f top=%.1f bottom=%.1f inner=%.1f plate=%@ height=%.1f base=%.1f font=%.1f canvas(bg=%.2f paper=%.2f stroke=%.2f text=%.2f)",
+                settings.layout.horizontalMargin,
+                settings.layout.topMargin,
+                settings.layout.bottomMargin,
+                settings.layout.innerPadding,
+                settings.plate.enabled ? "on" : "off",
+                settings.plate.height,
+                settings.plate.baselineOffset,
+                settings.plate.fontSize,
+                settings.canvas.backgroundGray,
+                settings.canvas.paperWhite,
+                settings.canvas.strokeGray,
+                settings.canvas.textGray
             )
         )
         let targetMaxDimension = Int(max(settings.outputSize.width, settings.outputSize.height) * 1.4)
@@ -91,7 +112,7 @@ final class RenderEngine {
         let timeline = TimelineEngine(
             itemCount: imageURLs.count,
             imageDuration: settings.imageDuration,
-            transitionDuration: settings.transitionDuration
+            transitionDuration: settings.effectiveTransitionDuration
         )
         await logger.log("timeline total duration: \(timeline.totalDuration)s")
 
@@ -121,8 +142,8 @@ final class RenderEngine {
             await logger.log("export failed: \(error.localizedDescription)")
             await cleanupPartialOutput(at: outputURL, logger: logger)
             switch error {
-            case .assetLoadFailed:
-                throw RenderEngineError.imageLoadFailed(error.localizedDescription)
+            case .assetLoadFailed(let index, let message):
+                throw RenderEngineError.assetLoadFailed(index: index, message: message)
             default:
                 throw RenderEngineError.exportFailed(error.localizedDescription)
             }
@@ -142,7 +163,7 @@ final class RenderEngine {
         let timeline = TimelineEngine(
             itemCount: imageURLs.count,
             imageDuration: settings.imageDuration,
-            transitionDuration: settings.transitionDuration
+            transitionDuration: settings.effectiveTransitionDuration
         )
         let composer = FrameComposer(settings: settings)
 

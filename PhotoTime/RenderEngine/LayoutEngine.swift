@@ -9,14 +9,14 @@ struct FrameLayout {
 }
 
 enum LayoutEngine {
-    nonisolated static func makeLayout(outputSize: CGSize) -> FrameLayout {
+    nonisolated static func makeLayout(outputSize: CGSize, settings: RenderSettings) -> FrameLayout {
         let canvas = CGRect(origin: .zero, size: outputSize)
 
-        let horizontalMargin: CGFloat = 180
-        let topMargin: CGFloat = 72
-        let bottomMargin: CGFloat = 96
-        let plateHeight: CGFloat = 96
-        let innerPadding: CGFloat = 24
+        let horizontalMargin = CGFloat(settings.layout.horizontalMargin)
+        let topMargin = CGFloat(settings.layout.topMargin)
+        let bottomMargin = CGFloat(settings.layout.bottomMargin)
+        let plateHeight = settings.plate.enabled ? CGFloat(settings.plate.height) : 0
+        let innerPadding = CGFloat(settings.layout.innerPadding)
 
         let paperWidth = outputSize.width - horizontalMargin * 2
         let paperHeight = outputSize.height - topMargin - bottomMargin
@@ -34,11 +34,12 @@ enum LayoutEngine {
             height: paperRect.height - plateHeight - innerPadding * 2
         )
 
+        let plateTextHeight = max(plateHeight - CGFloat(settings.plate.baselineOffset) * 2, 0)
         let plateTextRect = CGRect(
             x: paperRect.minX + innerPadding,
-            y: paperRect.minY + 18,
+            y: paperRect.minY + CGFloat(settings.plate.baselineOffset),
             width: paperRect.width - innerPadding * 2,
-            height: plateHeight - 36
+            height: plateTextHeight
         )
 
         return FrameLayout(canvas: canvas, paperRect: paperRect, photoRect: photoRect, plateTextRect: plateTextRect)

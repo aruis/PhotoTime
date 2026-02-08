@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -52,6 +53,207 @@ struct RenderEngineSmokeTests {
         let cgImage = try await engine.previewFrame(imageURLs: imageURLs, at: 1.2)
         #expect(cgImage.width == 1280)
         #expect(cgImage.height == 720)
+    }
+
+    @Test
+    func previewAfterSettingsChangeMatchesExportFirstFrame() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreviewSettings-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 4)
+        let outputURL = tempDir.appendingPathComponent("settings-consistency.mp4")
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.7,
+            transitionDuration: 0.25,
+            enableKenBurns: true,
+            layout: LayoutSettings(horizontalMargin: 150, topMargin: 64, bottomMargin: 90, innerPadding: 22),
+            plate: PlateSettings(enabled: true, height: 82, baselineOffset: 15, fontSize: 22),
+            canvas: CanvasSettings(backgroundGray: 0.12, paperWhite: 0.96, strokeGray: 0.78, textGray: 0.18)
+        )
+
+        let engine = RenderEngine(settings: settings)
+        let preview = try await engine.previewFrame(imageURLs: imageURLs, at: 0)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+        let exported = try Self.extractVideoFrame(url: outputURL, at: 0)
+        let diff = try Self.diffStats(lhs: preview, rhs: exported)
+
+        #expect(diff.mean <= 0.10)
+        #expect(diff.p95 <= 0.30)
+        #expect(diff.max <= 0.70)
+    }
+
+    @Test
+    func previewFailureDoesNotBlockSubsequentExport() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreviewRecover-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 3)
+        let outputURL = tempDir.appendingPathComponent("recover.mp4")
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.5,
+            transitionDuration: 0.1,
+            enableKenBurns: false
+        )
+
+        let engine = RenderEngine(settings: settings)
+        var previewFailed = false
+        do {
+            _ = try await engine.previewFrame(imageURLs: [], at: 0)
+        } catch {
+            previewFailed = true
+        }
+        #expect(previewFailed)
+
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+        #expect(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
+    @Test(arguments: [false, true])
+    func previewFramesMatchExportedFramesAtKeyTimes(enableKenBurns: Bool) async throws {
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.6,
+            transitionDuration: 0.2,
+            enableKenBurns: enableKenBurns
+        )
+        let thresholds = ConsistencyThresholds(
+            mean: 0.10,
+            p95: enableKenBurns ? 0.30 : 0.25,
+            max: enableKenBurns ? 0.70 : 0.60
+        )
+        try await runPreviewExportConsistency(
+            settings: settings,
+            imageCount: 4,
+            thresholds: thresholds,
+            label: "kenBurns=\(enableKenBurns ? "on" : "off")"
+        )
+    }
+
+    @Test(arguments: [0, 1, 2])
+    func previewFramesMatchExportedFramesForStyleVariants(variant: Int) async throws {
+        let outputSize = CGSize(width: 1280, height: 720)
+        let fps: Int32 = 15
+        let imageDuration = 0.6
+        let transitionDuration = 0.2
+        let enableKenBurns = false
+        let prefetchRadius = 1
+        let prefetchMaxConcurrent = 2
+        let defaultLayout = LayoutSettings.default
+        let defaultPlate = PlateSettings.default
+        let defaultCanvas = CanvasSettings.default
+
+        let settings: RenderSettings
+        let label: String
+        switch variant {
+        case 0:
+            settings = RenderSettings(
+                outputSize: outputSize,
+                fps: fps,
+                imageDuration: imageDuration,
+                transitionDuration: transitionDuration,
+                enableKenBurns: enableKenBurns,
+                prefetchRadius: prefetchRadius,
+                prefetchMaxConcurrent: prefetchMaxConcurrent,
+                layout: LayoutSettings(horizontalMargin: 120, topMargin: 50, bottomMargin: 72, innerPadding: 16),
+                plate: PlateSettings(enabled: true, height: 76, baselineOffset: 14, fontSize: 20),
+                canvas: defaultCanvas
+            )
+            label = "compact-layout"
+        case 1:
+            settings = RenderSettings(
+                outputSize: outputSize,
+                fps: fps,
+                imageDuration: imageDuration,
+                transitionDuration: transitionDuration,
+                enableKenBurns: enableKenBurns,
+                prefetchRadius: prefetchRadius,
+                prefetchMaxConcurrent: prefetchMaxConcurrent,
+                layout: LayoutSettings(horizontalMargin: 180, topMargin: 72, bottomMargin: 88, innerPadding: 24),
+                plate: PlateSettings(enabled: false, height: 96, baselineOffset: 18, fontSize: 26),
+                canvas: defaultCanvas
+            )
+            label = "no-plate"
+        default:
+            settings = RenderSettings(
+                outputSize: outputSize,
+                fps: fps,
+                imageDuration: imageDuration,
+                transitionDuration: transitionDuration,
+                enableKenBurns: enableKenBurns,
+                prefetchRadius: prefetchRadius,
+                prefetchMaxConcurrent: prefetchMaxConcurrent,
+                layout: defaultLayout,
+                plate: defaultPlate,
+                canvas: CanvasSettings(backgroundGray: 0.15, paperWhite: 0.95, strokeGray: 0.72, textGray: 0.25)
+            )
+            label = "contrast-canvas"
+        }
+
+        try await runPreviewExportConsistency(
+            settings: settings,
+            imageCount: 4,
+            thresholds: ConsistencyThresholds(mean: 0.10, p95: 0.28, max: 0.65),
+            label: label
+        )
+    }
+
+    private func runPreviewExportConsistency(
+        settings: RenderSettings,
+        imageCount: Int,
+        thresholds: ConsistencyThresholds,
+        label: String
+    ) async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreviewConsistency-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: imageCount)
+        let outputURL = tempDir.appendingPathComponent("consistency.mp4")
+
+        let timeline = TimelineEngine(
+            itemCount: imageURLs.count,
+            imageDuration: settings.imageDuration,
+            transitionDuration: settings.transitionDuration
+        )
+
+        let sampleTimes = [
+            Self.alignToFrame(0, fps: settings.fps),
+            Self.alignToFrame(settings.imageDuration - settings.transitionDuration * 0.5, fps: settings.fps),
+            Self.alignToFrame(max(timeline.totalDuration - (1.0 / Double(settings.fps)), 0), fps: settings.fps)
+        ]
+
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+
+        for time in sampleTimes {
+            let preview = try await engine.previewFrame(imageURLs: imageURLs, at: time)
+            let exported = try Self.extractVideoFrame(url: outputURL, at: time)
+            let diff = try Self.diffStats(lhs: preview, rhs: exported)
+            print(
+                String(
+                    format: "Preview/export consistency label=%@ t=%.3fs mean=%.4f p95=%.4f max=%.4f",
+                    label,
+                    time,
+                    diff.mean,
+                    diff.p95,
+                    diff.max
+                )
+            )
+
+            #expect(diff.mean <= thresholds.mean)
+            #expect(diff.p95 <= thresholds.p95)
+            #expect(diff.max <= thresholds.max)
+        }
     }
 
     @Test
@@ -160,6 +362,11 @@ struct RenderEngineSmokeTests {
         }
 
         let comparisons = Self.makeComparisons(current: summaries, previous: previousReport?.summaries ?? [])
+        let thresholds = StressRegressionThresholds.default
+        let regressionSummaries = Self.makeRegressionSummaries(
+            comparisons: comparisons,
+            thresholds: thresholds
+        )
         let report = StressReport(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
             repeatsPerCount: Self.stressRepeats,
@@ -168,6 +375,10 @@ struct RenderEngineSmokeTests {
             comparisonToPrevious: StressComparison(
                 previousGeneratedAt: previousReport?.generatedAt,
                 summaries: comparisons
+            ),
+            regressionGate: StressRegressionGate(
+                thresholds: thresholds,
+                summaries: regressionSummaries
             )
         )
 
@@ -181,6 +392,13 @@ struct RenderEngineSmokeTests {
         print(reportText)
         print(Self.humanReadableSummary(summaries))
         print(Self.humanReadableComparison(comparisons, previousGeneratedAt: previousReport?.generatedAt))
+        print(
+            Self.humanReadableRegressionGate(
+                regressionSummaries,
+                thresholds: thresholds,
+                previousGeneratedAt: previousReport?.generatedAt
+            )
+        )
 
         #expect(FileManager.default.fileExists(atPath: reportURL.path))
         #expect(!runs.isEmpty)
@@ -322,6 +540,72 @@ struct RenderEngineSmokeTests {
         return sorted[index]
     }
 
+    private static func alignToFrame(_ second: TimeInterval, fps: Int32) -> TimeInterval {
+        let frame = (second * Double(fps)).rounded()
+        return frame / Double(fps)
+    }
+
+    private static func extractVideoFrame(url: URL, at second: TimeInterval) throws -> CGImage {
+        let asset = AVAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+        let time = CMTime(seconds: second, preferredTimescale: 600)
+        return try generator.copyCGImage(at: time, actualTime: nil)
+    }
+
+    private static func diffStats(lhs: CGImage, rhs: CGImage) throws -> ImageDiffStats {
+        guard lhs.width == rhs.width, lhs.height == rhs.height else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 20, userInfo: [NSLocalizedDescriptionKey: "image size mismatch"])
+        }
+
+        let lhsBytes = try rgbaBytes(from: lhs)
+        let rhsBytes = try rgbaBytes(from: rhs)
+        guard lhsBytes.count == rhsBytes.count else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 21, userInfo: [NSLocalizedDescriptionKey: "image byte size mismatch"])
+        }
+
+        var channelDiffs: [Double] = []
+        channelDiffs.reserveCapacity((lhs.width * lhs.height) * 3)
+
+        for index in stride(from: 0, to: lhsBytes.count, by: 4) {
+            let dr = abs(Int(lhsBytes[index]) - Int(rhsBytes[index]))
+            let dg = abs(Int(lhsBytes[index + 1]) - Int(rhsBytes[index + 1]))
+            let db = abs(Int(lhsBytes[index + 2]) - Int(rhsBytes[index + 2]))
+            channelDiffs.append(Double(dr) / 255.0)
+            channelDiffs.append(Double(dg) / 255.0)
+            channelDiffs.append(Double(db) / 255.0)
+        }
+
+        let mean = channelDiffs.reduce(0, +) / Double(channelDiffs.count)
+        let maxDiff = channelDiffs.max() ?? 0
+        return ImageDiffStats(mean: mean, p95: p95(channelDiffs), max: maxDiff)
+    }
+
+    private static func rgbaBytes(from image: CGImage) throws -> [UInt8] {
+        let width = image.width
+        let height = image.height
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var bytes = [UInt8](repeating: 0, count: height * bytesPerRow)
+
+        guard let context = CGContext(
+            data: &bytes,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 22, userInfo: [NSLocalizedDescriptionKey: "cannot create compare context"])
+        }
+
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return bytes
+    }
+
     private static func humanReadableSummary(_ summaries: [StressSummary]) -> String {
         let header = "Stress Summary (ms): count | elapsed avg/p95 | wall avg/p95"
         let lines = summaries
@@ -361,6 +645,38 @@ struct RenderEngineSmokeTests {
         return ([header] + lines).joined(separator: "\n")
     }
 
+    private static func humanReadableRegressionGate(
+        _ summaries: [StressRegressionSummary],
+        thresholds: StressRegressionThresholds,
+        previousGeneratedAt: String?
+    ) -> String {
+        guard !summaries.isEmpty else {
+            return "Stress Regression Gate: no previous report found"
+        }
+
+        let previous = previousGeneratedAt ?? "unknown"
+        let header = String(
+            format: "Stress Regression Gate (vs previous @ %@): elapsed avg<=%.1f%% p95<=%.1f%% | wall avg<=%.1f%% p95<=%.1f%%",
+            previous,
+            thresholds.elapsedAvgMaxIncreasePercent,
+            thresholds.elapsedP95MaxIncreasePercent,
+            thresholds.wallAvgMaxIncreasePercent,
+            thresholds.wallP95MaxIncreasePercent
+        )
+
+        let lines = summaries
+            .sorted { $0.imageCount < $1.imageCount }
+            .map { summary in
+                if summary.withinBudget {
+                    return "\(summary.imageCount): OK"
+                }
+                let reasons = summary.triggeredMetrics.joined(separator: ",")
+                return "\(summary.imageCount): REGRESSION [\(reasons)]"
+            }
+
+        return ([header] + lines).joined(separator: "\n")
+    }
+
     private static func loadStressReport(at url: URL) throws -> StressReport? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
         let data = try Data(contentsOf: url)
@@ -378,6 +694,33 @@ struct RenderEngineSmokeTests {
                 elapsedP95ChangePercent: percentChange(current: currentSummary.elapsedP95Ms, previous: previousSummary.elapsedP95Ms),
                 wallAvgChangePercent: percentChange(current: currentSummary.wallAvgMs, previous: previousSummary.wallAvgMs),
                 wallP95ChangePercent: percentChange(current: currentSummary.wallP95Ms, previous: previousSummary.wallP95Ms)
+            )
+        }
+    }
+
+    private static func makeRegressionSummaries(
+        comparisons: [StressSummaryComparison],
+        thresholds: StressRegressionThresholds
+    ) -> [StressRegressionSummary] {
+        comparisons.map { item in
+            var triggered: [String] = []
+            if item.elapsedAvgChangePercent > thresholds.elapsedAvgMaxIncreasePercent {
+                triggered.append("elapsedAvg")
+            }
+            if item.elapsedP95ChangePercent > thresholds.elapsedP95MaxIncreasePercent {
+                triggered.append("elapsedP95")
+            }
+            if item.wallAvgChangePercent > thresholds.wallAvgMaxIncreasePercent {
+                triggered.append("wallAvg")
+            }
+            if item.wallP95ChangePercent > thresholds.wallP95MaxIncreasePercent {
+                triggered.append("wallP95")
+            }
+
+            return StressRegressionSummary(
+                imageCount: item.imageCount,
+                withinBudget: triggered.isEmpty,
+                triggeredMetrics: triggered
             )
         }
     }
@@ -417,6 +760,19 @@ private struct StressReport: Codable {
     let runs: [StressRunResult]
     let summaries: [StressSummary]
     let comparisonToPrevious: StressComparison?
+    let regressionGate: StressRegressionGate?
+}
+
+private struct ImageDiffStats {
+    let mean: Double
+    let p95: Double
+    let max: Double
+}
+
+private struct ConsistencyThresholds {
+    let mean: Double
+    let p95: Double
+    let max: Double
 }
 
 private struct StressComparison: Codable {
@@ -430,4 +786,29 @@ private struct StressSummaryComparison: Codable {
     let elapsedP95ChangePercent: Double
     let wallAvgChangePercent: Double
     let wallP95ChangePercent: Double
+}
+
+private struct StressRegressionGate: Codable {
+    let thresholds: StressRegressionThresholds
+    let summaries: [StressRegressionSummary]
+}
+
+private struct StressRegressionThresholds: Codable {
+    let elapsedAvgMaxIncreasePercent: Double
+    let elapsedP95MaxIncreasePercent: Double
+    let wallAvgMaxIncreasePercent: Double
+    let wallP95MaxIncreasePercent: Double
+
+    static let `default` = StressRegressionThresholds(
+        elapsedAvgMaxIncreasePercent: 20,
+        elapsedP95MaxIncreasePercent: 25,
+        wallAvgMaxIncreasePercent: 20,
+        wallP95MaxIncreasePercent: 25
+    )
+}
+
+private struct StressRegressionSummary: Codable {
+    let imageCount: Int
+    let withinBudget: Bool
+    let triggeredMetrics: [String]
 }

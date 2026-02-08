@@ -23,12 +23,46 @@ final class PhotoTimeUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testPrimarySecondaryActionGroupsAndInitialButtonState() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        XCTAssertTrue(app.otherElements["group_primary_actions"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.otherElements["group_secondary_actions"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["primary_export"].isEnabled)
+        XCTAssertFalse(app.buttons["primary_cancel"].isEnabled)
+        XCTAssertFalse(app.buttons["secondary_retry_export"].isEnabled)
+    }
+
+    @MainActor
+    func testFailureScenarioShowsFailureCard() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ui-test-scenario", "failure"]
+        app.launch()
+
+        XCTAssertTrue(app.otherElements["failure_card"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["failure_primary_action"].isEnabled)
+        XCTAssertTrue(app.buttons["failure_open_log"].isEnabled)
+    }
+
+    @MainActor
+    func testSuccessScenarioShowsSuccessCard() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ui-test-scenario", "success"]
+        app.launch()
+
+        XCTAssertTrue(app.otherElements["success_card"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["success_open_output"].isEnabled)
+        XCTAssertTrue(app.buttons["success_export_again"].isEnabled)
+    }
+
+    @MainActor
+    func testInvalidScenarioShowsInlineValidation() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ui-test-scenario", "invalid"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["settings_validation_message"].waitForExistence(timeout: 2))
     }
 
     @MainActor
