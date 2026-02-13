@@ -797,7 +797,7 @@ final class ExportViewModel: ObservableObject {
         let urls = request.imageURLs
         let destination = request.outputURL
         let settings = request.settings
-        let logURL = destination.deletingPathExtension().appendingPathExtension("render.log")
+        let logURL = RenderLogger.resolvedLogURL(for: destination)
         lastLogURL = logURL
 
         exportTask = Task { [weak self] in
@@ -840,6 +840,10 @@ final class ExportViewModel: ObservableObject {
     func openLatestLog() {
         guard let url = lastLogURL else {
             workflow.setIdleMessage("暂无日志文件可打开")
+            return
+        }
+        if !FileManager.default.fileExists(atPath: url.path) {
+            workflow.setIdleMessage("日志文件不存在: \(url.path)")
             return
         }
         NSWorkspace.shared.open(url)

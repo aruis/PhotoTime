@@ -64,9 +64,7 @@ final class RenderEngine {
             throw RenderEngineError.emptyInput
         }
 
-        let logURL = outputURL
-            .deletingPathExtension()
-            .appendingPathExtension("render.log")
+        let logURL = RenderLogger.resolvedLogURL(for: outputURL)
         let runID = UUID().uuidString
         let logger = RenderLogger(fileURL: logURL, runID: runID)
         await logger.log("start export")
