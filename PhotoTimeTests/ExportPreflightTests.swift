@@ -68,6 +68,37 @@ struct ExportPreflightTests {
         #expect(!report.hasBlockingIssues)
     }
 
+    @Test
+    func preflightMarksLongFilenameAsReviewIssue() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreflight-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let baseName = String(repeating: "longname-", count: 12) + ".png"
+        let url = tempDir.appendingPathComponent(baseName)
+        try Self.writeImage(to: url, width: 1200, height: 800)
+
+        let report = ExportPreflightScanner.scan(imageURLs: [url])
+        #expect(report.reviewIssues.count == 1)
+        #expect(report.reviewIssues.first?.message.contains("文件名较长") == true)
+    }
+
+    @Test
+    func preflightMarksExtremeAspectRatioAsReviewIssue() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimePreflight-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let url = tempDir.appendingPathComponent("panorama.png")
+        try Self.writeImage(to: url, width: 4000, height: 500)
+
+        let report = ExportPreflightScanner.scan(imageURLs: [url])
+        #expect(report.reviewIssues.count == 1)
+        #expect(report.reviewIssues.first?.message.contains("长宽比极端") == true)
+    }
+
     private static func writeImage(to url: URL, width: Int, height: Int) throws {
         guard let context = CGContext(
             data: nil,

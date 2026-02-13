@@ -7,9 +7,10 @@ import UniformTypeIdentifiers
 @testable import PhotoTime
 
 @Suite(.serialized)
+@MainActor
 struct RenderEngineSmokeTests {
-    private static let stressCounts = [30, 60, 100]
-    private static let stressRepeats = 2
+    nonisolated private static let stressCounts = [30, 60, 100]
+    nonisolated private static let stressRepeats = 2
 
     @Test
     func previewPipelineProducesImage() async throws {
@@ -71,7 +72,7 @@ struct RenderEngineSmokeTests {
             transitionDuration: 0.25,
             enableKenBurns: true,
             layout: LayoutSettings(horizontalMargin: 150, topMargin: 64, bottomMargin: 90, innerPadding: 22),
-            plate: PlateSettings(enabled: true, height: 82, baselineOffset: 15, fontSize: 22),
+            plate: PlateSettings(enabled: true, height: 82, baselineOffset: 15, fontSize: 22, placement: .frame),
             canvas: CanvasSettings(backgroundGray: 0.12, paperWhite: 0.96, strokeGray: 0.78, textGray: 0.18)
         )
 
@@ -164,7 +165,7 @@ struct RenderEngineSmokeTests {
                 prefetchRadius: prefetchRadius,
                 prefetchMaxConcurrent: prefetchMaxConcurrent,
                 layout: LayoutSettings(horizontalMargin: 120, topMargin: 50, bottomMargin: 72, innerPadding: 16),
-                plate: PlateSettings(enabled: true, height: 76, baselineOffset: 14, fontSize: 20),
+                plate: PlateSettings(enabled: true, height: 76, baselineOffset: 14, fontSize: 20, placement: .frame),
                 canvas: defaultCanvas
             )
             label = "compact-layout"
@@ -178,7 +179,7 @@ struct RenderEngineSmokeTests {
                 prefetchRadius: prefetchRadius,
                 prefetchMaxConcurrent: prefetchMaxConcurrent,
                 layout: LayoutSettings(horizontalMargin: 180, topMargin: 72, bottomMargin: 88, innerPadding: 24),
-                plate: PlateSettings(enabled: false, height: 96, baselineOffset: 18, fontSize: 26),
+                plate: PlateSettings(enabled: false, height: 96, baselineOffset: 18, fontSize: 26, placement: .frame),
                 canvas: defaultCanvas
             )
             label = "no-plate"
@@ -223,13 +224,16 @@ struct RenderEngineSmokeTests {
         let timeline = TimelineEngine(
             itemCount: imageURLs.count,
             imageDuration: settings.imageDuration,
-            transitionDuration: settings.transitionDuration
+            transitionDuration: settings.effectiveTransitionDuration
         )
 
+        let fps = settings.fps
+        let imageDuration = settings.imageDuration
+        let transitionDuration = settings.effectiveTransitionDuration
         let sampleTimes = [
-            Self.alignToFrame(0, fps: settings.fps),
-            Self.alignToFrame(settings.imageDuration - settings.transitionDuration * 0.5, fps: settings.fps),
-            Self.alignToFrame(max(timeline.totalDuration - (1.0 / Double(settings.fps)), 0), fps: settings.fps)
+            Self.alignToFrame(0, fps: fps),
+            Self.alignToFrame(imageDuration - transitionDuration * 0.5, fps: fps),
+            Self.alignToFrame(max(timeline.totalDuration - (1.0 / Double(fps)), 0), fps: fps)
         ]
 
         let engine = RenderEngine(settings: settings)

@@ -3,8 +3,74 @@ import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
+private extension PhotoOrientationStrategy {
+    var displayName: String {
+        switch self {
+        case .followAsset:
+            return "按素材方向"
+        case .forceLandscape:
+            return "强制横图"
+        case .forcePortrait:
+            return "强制竖图"
+        }
+    }
+}
+
+private extension PreflightIssue {
+    var ignoreKey: String {
+        "\(index)|\(severity.rawValue)|\(fileName)|\(message)"
+    }
+}
+
 @MainActor
 final class ExportViewModel: ObservableObject {
+    enum FileListFilter: String, CaseIterable, Identifiable {
+        case all
+        case problematic
+        case mustFix
+        case normal
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return "全部"
+            case .problematic:
+                return "仅问题"
+            case .mustFix:
+                return "仅必须修复"
+            case .normal:
+                return "仅正常"
+            }
+        }
+    }
+
+    enum PreflightIssueFilter: String, CaseIterable, Identifiable {
+        case all
+        case mustFix
+        case review
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .all:
+                return "全部问题"
+            case .mustFix:
+                return "仅必须修复"
+            case .review:
+                return "仅建议关注"
+            }
+        }
+    }
+
+    struct FlowStep: Identifiable {
+        let id: String
+        let title: String
+        let done: Bool
+    }
+
     @Published var imageURLs: [URL] = []
     @Published var outputURL: URL?
     @Published var previewImage: NSImage?
@@ -13,7 +79,10 @@ final class ExportViewModel: ObservableObject {
     @Published var previewErrorMessage: String?
     @Published var failedAssetNames: [String] = []
     @Published var preflightReport: PreflightReport?
+    @Published var ignoredPreflightIssueKeys: Set<String> = []
     @Published var skippedAssetNamesFromPreflight: [String] = []
+    @Published var fileListFilter: FileListFilter = .all
+    @Published var preflightIssueFilter: PreflightIssueFilter = .all
     @Published var config = RenderEditorConfig()
     @Published var recoveryAdvice: RecoveryAdvice?
     @Published private var workflow = ExportWorkflowModel()
@@ -23,8 +92,11 @@ final class ExportViewModel: ObservableObject {
     private var previewTask: Task<Void, Never>?
     private var lastFailedRequest: ExportRequest?
     private var pendingRequestFromPreflight: ExportRequest?
+    private var pendingPreviewRequest: (urls: [URL], second: Double, useProxySettings: Bool)?
     private var lastLogURL: URL?
     private var lastSuccessfulOutputURL: URL?
+    private var autoPreviewRefreshEnabled = true
+    private var timelinePreviewEnabled = true
 
     init(makeEngine: @escaping (RenderSettings) -> any RenderingEngineClient = { settings in
         RenderEngine(settings: settings)
@@ -73,12 +145,38 @@ final class ExportViewModel: ObservableObject {
         lastSuccessfulOutputURL?.lastPathComponent
     }
 
+    var latestOutputURL: URL? {
+        lastSuccessfulOutputURL
+    }
+
     var canRetryLastExport: Bool {
         !isBusy && lastFailedRequest != nil
     }
 
     var hasBlockingPreflightIssues: Bool {
         preflightReport?.hasBlockingIssues == true
+    }
+
+    var filteredPreflightIssues: [PreflightIssue] {
+        guard let report = preflightReport else { return [] }
+        let visibleIssues = report.issues.filter { !ignoredPreflightIssueKeys.contains($0.ignoreKey) }
+        switch preflightIssueFilter {
+        case .all:
+            return visibleIssues
+        case .mustFix:
+            return visibleIssues.filter { $0.severity == .mustFix }
+        case .review:
+            return visibleIssues.filter { $0.severity == .shouldReview }
+        }
+    }
+
+    var ignoredIssueCount: Int {
+        ignoredPreflightIssueKeys.count
+    }
+
+    var ignoredPreflightIssues: [PreflightIssue] {
+        guard let report = preflightReport else { return [] }
+        return report.issues.filter { ignoredPreflightIssueKeys.contains($0.ignoreKey) }
     }
 
     var actionAvailability: ExportActionAvailability {
@@ -88,6 +186,120 @@ final class ExportViewModel: ObservableObject {
         )
     }
 
+    var hasSelectedImages: Bool {
+        !imageURLs.isEmpty
+    }
+
+    var hasOutputPath: Bool {
+        outputURL != nil
+    }
+
+    var hasPreviewFrame: Bool {
+        previewImage != nil
+    }
+
+    var canRunPreview: Bool {
+        actionAvailability.canGeneratePreview && hasSelectedImages && validationMessage == nil
+    }
+
+    var canRunExport: Bool {
+        actionAvailability.canStartExport && hasSelectedImages && hasOutputPath && validationMessage == nil
+    }
+
+    var flowSteps: [FlowStep] {
+        [
+            FlowStep(id: "select-images", title: "选择图片", done: hasSelectedImages),
+            FlowStep(id: "preview", title: "生成预览", done: hasPreviewFrame),
+            FlowStep(id: "select-output", title: "选择导出路径", done: hasOutputPath),
+            FlowStep(id: "export", title: "导出 MP4", done: hasSuccessCard)
+        ]
+    }
+
+    var nextActionHint: String {
+        if !hasSelectedImages {
+            return "下一步：先选择图片。"
+        }
+        if validationMessage != nil {
+            return "下一步：先修正导出参数中的校验错误。"
+        }
+        if !hasPreviewFrame {
+            return "下一步：生成预览，确认画面无误。"
+        }
+        if !hasOutputPath {
+            return "下一步：选择导出路径。"
+        }
+        if isExporting {
+            return "正在导出，请等待完成。"
+        }
+        return "已就绪：可以导出 MP4。"
+    }
+
+    var orderedImageURLsForDisplay: [URL] {
+        let problematic = problematicAssetNameSet
+        return imageURLs.sorted { lhs, rhs in
+            let lhsProblematic = problematic.contains(lhs.lastPathComponent)
+            let rhsProblematic = problematic.contains(rhs.lastPathComponent)
+            if lhsProblematic != rhsProblematic {
+                return lhsProblematic && !rhsProblematic
+            }
+            return lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    var filteredImageURLsForDisplay: [URL] {
+        let problematic = problematicAssetNameSet
+        let mustFix = mustFixAssetNameSet
+        switch fileListFilter {
+        case .all:
+            return orderedImageURLsForDisplay
+        case .problematic:
+            return orderedImageURLsForDisplay.filter { problematic.contains($0.lastPathComponent) }
+        case .mustFix:
+            return orderedImageURLsForDisplay.filter { mustFix.contains($0.lastPathComponent) }
+        case .normal:
+            return orderedImageURLsForDisplay.filter { !problematic.contains($0.lastPathComponent) }
+        }
+    }
+
+    var problematicAssetNameSet: Set<String> {
+        var names = Set(failedAssetNames)
+        if let report = preflightReport {
+            for issue in report.issues where !ignoredPreflightIssueKeys.contains(issue.ignoreKey) {
+                names.insert(issue.fileName)
+            }
+        }
+        for skipped in skippedAssetNamesFromPreflight {
+            names.insert(skipped)
+        }
+        return names
+    }
+
+    var mustFixAssetNameSet: Set<String> {
+        guard let report = preflightReport else { return [] }
+        return Set(
+            report.issues
+                .filter { $0.severity == .mustFix && !ignoredPreflightIssueKeys.contains($0.ignoreKey) }
+                .map(\.fileName)
+        )
+    }
+
+    func preflightIssueTags(for fileName: String) -> [String] {
+        guard let report = preflightReport else { return [] }
+        let issues = report.issues.filter {
+            $0.fileName == fileName && !ignoredPreflightIssueKeys.contains($0.ignoreKey)
+        }
+        guard !issues.isEmpty else { return [] }
+
+        var tags: [String] = []
+        if issues.contains(where: { $0.severity == .mustFix }) {
+            tags.append("必须修复")
+        }
+        if issues.contains(where: { $0.severity == .shouldReview }) {
+            tags.append("建议关注")
+        }
+        return tags
+    }
+
     var configSignature: String {
         [
             "\(config.outputWidth)",
@@ -95,6 +307,18 @@ final class ExportViewModel: ObservableObject {
             "\(config.fps)",
             String(format: "%.3f", config.imageDuration),
             String(format: "%.3f", config.transitionDuration),
+            config.orientationStrategy.rawValue,
+            config.frameStylePreset.rawValue,
+            String(format: "%.3f", config.canvasBackgroundGray),
+            String(format: "%.3f", config.canvasPaperWhite),
+            String(format: "%.3f", config.canvasStrokeGray),
+            String(format: "%.3f", config.canvasTextGray),
+            String(format: "%.2f", config.horizontalMargin),
+            String(format: "%.2f", config.topMargin),
+            String(format: "%.2f", config.bottomMargin),
+            String(format: "%.2f", config.innerPadding),
+            config.plateEnabled ? "1" : "0",
+            config.platePlacement.rawValue,
             config.enableCrossfade ? "1" : "0",
             config.enableKenBurns ? "1" : "0",
             "\(config.prefetchRadius)",
@@ -111,12 +335,14 @@ final class ExportViewModel: ObservableObject {
         panel.canChooseDirectories = false
 
         guard panel.runModal() == .OK else { return }
-        imageURLs = panel.urls.sorted { $0.lastPathComponent < $1.lastPathComponent }
+        imageURLs = normalizedImageURLs(from: panel.urls)
         previewImage = nil
         previewSecond = 0
         previewStatusMessage = "素材已更新，请生成预览"
         previewErrorMessage = nil
         preflightReport = nil
+        ignoredPreflightIssueKeys = []
+        preflightIssueFilter = .all
         skippedAssetNamesFromPreflight = []
         pendingRequestFromPreflight = nil
         workflow.setIdleMessage("已选择 \(imageURLs.count) 张图片")
@@ -125,6 +351,78 @@ final class ExportViewModel: ObservableObject {
         if !imageURLs.isEmpty, isSettingsValid {
             generatePreview()
         }
+    }
+
+    func addImages() {
+        guard !isBusy else { return }
+
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+
+        guard panel.runModal() == .OK else { return }
+        appendImages(panel.urls, source: "已新增")
+    }
+
+    func importDroppedItems(_ urls: [URL]) {
+        guard !isBusy else { return }
+        appendImages(urls, source: "已拖入")
+    }
+
+    func removeImage(_ url: URL) {
+        guard !isBusy else { return }
+        guard let index = imageURLs.firstIndex(of: url) else { return }
+
+        imageURLs.remove(at: index)
+        failedAssetNames.removeAll(where: { $0 == url.lastPathComponent })
+        skippedAssetNamesFromPreflight.removeAll(where: { $0 == url.lastPathComponent })
+        preflightReport = nil
+        ignoredPreflightIssueKeys = []
+        preflightIssueFilter = .all
+        pendingRequestFromPreflight = nil
+
+        if imageURLs.isEmpty {
+            previewImage = nil
+            previewSecond = 0
+            previewStatusMessage = "未生成预览"
+            previewErrorMessage = nil
+            workflow.setIdleMessage("素材已清空")
+            return
+        }
+
+        previewImage = nil
+        previewSecond = min(previewSecond, previewMaxSecond)
+        previewStatusMessage = "素材已更新，请生成预览"
+        previewErrorMessage = nil
+        workflow.setIdleMessage("已删除: \(url.lastPathComponent)")
+
+        if isSettingsValid {
+            generatePreview()
+        }
+    }
+
+    func reorderImage(from source: URL, to target: URL) {
+        guard !isBusy else { return }
+        guard source != target else { return }
+        guard let sourceIndex = imageURLs.firstIndex(of: source),
+              let targetIndex = imageURLs.firstIndex(of: target) else { return }
+
+        var reordered = imageURLs
+        let moving = reordered.remove(at: sourceIndex)
+        let insertIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+        reordered.insert(moving, at: insertIndex)
+        imageURLs = reordered
+
+        preflightReport = nil
+        ignoredPreflightIssueKeys = []
+        preflightIssueFilter = .all
+        skippedAssetNamesFromPreflight = []
+        pendingRequestFromPreflight = nil
+        previewImage = nil
+        previewStatusMessage = "素材顺序已更新，请生成预览"
+        previewErrorMessage = nil
+        workflow.setIdleMessage("已调整素材顺序")
     }
 
     func chooseOutput() {
@@ -211,20 +509,8 @@ final class ExportViewModel: ObservableObject {
             outputURL: outputURL,
             settings: config.renderSettings
         )
-
-        let report = ExportPreflightScanner.scan(imageURLs: request.imageURLs)
-        preflightReport = report
-        skippedAssetNamesFromPreflight = []
-
-        guard !report.hasBlockingIssues else {
-            pendingRequestFromPreflight = request
-            workflow.setIdleMessage(
-                "导出前检查发现 \(report.blockingIssues.count) 个必须修复问题。可点击“跳过问题素材并导出”。"
-            )
-            return
-        }
-
         pendingRequestFromPreflight = nil
+        skippedAssetNamesFromPreflight = []
         startExport(request: request, fromRetry: false)
     }
 
@@ -247,6 +533,8 @@ final class ExportViewModel: ObservableObject {
         }
 
         pendingRequestFromPreflight = nil
+        fileListFilter = .all
+        preflightIssueFilter = .all
         let filteredRequest = ExportRequest(
             imageURLs: filtered,
             outputURL: request.outputURL,
@@ -254,6 +542,90 @@ final class ExportViewModel: ObservableObject {
         )
         workflow.setIdleMessage("已跳过 \(skippedAssetNamesFromPreflight.count) 张问题素材，开始导出。")
         startExport(request: filteredRequest, fromRetry: false)
+    }
+
+    func rerunPreflight() {
+        guard !isBusy else { return }
+        guard !imageURLs.isEmpty else {
+            workflow.setIdleMessage("请先选择图片")
+            return
+        }
+
+        let sourceURLs = pendingRequestFromPreflight?.imageURLs ?? imageURLs
+        let report = ExportPreflightScanner.scan(imageURLs: sourceURLs)
+        preflightReport = report
+        ignoredPreflightIssueKeys = []
+        skippedAssetNamesFromPreflight = []
+        preflightIssueFilter = report.hasBlockingIssues ? .mustFix : .all
+
+        if report.issues.isEmpty {
+            fileListFilter = .all
+            workflow.setIdleMessage("复检通过：当前未发现导出风险。")
+            return
+        }
+
+        if report.hasBlockingIssues {
+            fileListFilter = .problematic
+            workflow.setIdleMessage("复检结果：仍有 \(report.blockingIssues.count) 个必须修复问题。")
+        } else {
+            workflow.setIdleMessage("复检完成：存在 \(report.reviewIssues.count) 个建议关注问题。")
+        }
+    }
+
+    func focusOnProblematicAssets() -> URL? {
+        let issues = filteredPreflightIssues
+        guard !issues.isEmpty else {
+            workflow.setIdleMessage("当前没有问题素材。")
+            return nil
+        }
+        fileListFilter = .problematic
+        guard let url = defaultProblematicAssetURL(from: issues) else {
+            workflow.setIdleMessage("已切到“仅问题”，请先处理必须修复项。")
+            return nil
+        }
+        workflow.setIdleMessage("已切到“仅问题”，优先处理：\(url.lastPathComponent)")
+        return url
+    }
+
+    func focusAssetForIssue(_ issue: PreflightIssue) -> URL? {
+        fileListFilter = .problematic
+        guard imageURLs.indices.contains(issue.index) else {
+            workflow.setIdleMessage("无法定位问题素材：索引越界。")
+            return nil
+        }
+        let url = imageURLs[issue.index]
+        workflow.setIdleMessage("已定位问题素材：\(url.lastPathComponent)")
+        return url
+    }
+
+    private func defaultProblematicAssetURL(from issues: [PreflightIssue]) -> URL? {
+        let preferredIssue = issues.first(where: { $0.severity == .mustFix }) ?? issues.first
+        guard let issue = preferredIssue, imageURLs.indices.contains(issue.index) else {
+            return nil
+        }
+        return imageURLs[issue.index]
+    }
+
+    func isIssueIgnored(_ issue: PreflightIssue) -> Bool {
+        ignoredPreflightIssueKeys.contains(issue.ignoreKey)
+    }
+
+    func toggleIgnoreIssue(_ issue: PreflightIssue) {
+        let key = issue.ignoreKey
+        if ignoredPreflightIssueKeys.contains(key) {
+            ignoredPreflightIssueKeys.remove(key)
+            workflow.setIdleMessage("已恢复问题项：\(issue.fileName)")
+        } else {
+            ignoredPreflightIssueKeys.insert(key)
+            workflow.setIdleMessage("已忽略本次：\(issue.fileName)")
+        }
+    }
+
+    func restoreAllIgnoredIssues() {
+        guard !ignoredPreflightIssueKeys.isEmpty else { return }
+        let count = ignoredPreflightIssueKeys.count
+        ignoredPreflightIssueKeys.removeAll()
+        workflow.setIdleMessage("已恢复 \(count) 项忽略问题。")
     }
 
     func retryLastExport() {
@@ -266,9 +638,18 @@ final class ExportViewModel: ObservableObject {
     }
 
     func generatePreview() {
-        guard previewTask == nil else { return }
-        guard !imageURLs.isEmpty else {
-            workflow.setIdleMessage("请先选择图片")
+        guard timelinePreviewEnabled else { return }
+        generatePreview(for: imageURLs, at: previewSecond, useProxySettings: true)
+    }
+
+    func generatePreviewForSelectedAsset(_ url: URL) {
+        generatePreview(for: [url], at: 0, useProxySettings: false)
+    }
+
+    private func generatePreview(for urls: [URL], at second: Double, useProxySettings: Bool) {
+        guard !urls.isEmpty else { return }
+        if previewTask != nil {
+            pendingPreviewRequest = (urls: urls, second: second, useProxySettings: useProxySettings)
             return
         }
 
@@ -282,13 +663,25 @@ final class ExportViewModel: ObservableObject {
         previewStatusMessage = "预览生成中..."
         previewErrorMessage = nil
 
-        let urls = imageURLs
-        let settings = config.renderSettings
-        let second = previewSecond
+        pendingPreviewRequest = nil
+        let baseSettings = config.renderSettings
+        let settings = useProxySettings
+            ? interactivePreviewSettings(from: baseSettings)
+            : baseSettings
 
         previewTask = Task { [weak self] in
             guard let self else { return }
-            defer { previewTask = nil }
+            defer {
+                previewTask = nil
+                if let next = pendingPreviewRequest {
+                    pendingPreviewRequest = nil
+                    generatePreview(
+                        for: next.urls,
+                        at: next.second,
+                        useProxySettings: next.useProxySettings
+                    )
+                }
+            }
 
             do {
                 let engine = makeEngine(settings)
@@ -312,6 +705,7 @@ final class ExportViewModel: ObservableObject {
     }
 
     func schedulePreviewRegeneration() {
+        guard timelinePreviewEnabled else { return }
         guard !isBusy else { return }
         guard !imageURLs.isEmpty else { return }
         guard isSettingsValid else { return }
@@ -339,8 +733,59 @@ final class ExportViewModel: ObservableObject {
     func handleConfigChanged() {
         config.clampToSafeRange()
         previewSecond = min(previewSecond, previewMaxSecond)
+        guard autoPreviewRefreshEnabled else { return }
         previewStatusMessage = "参数已变更，预览将自动刷新"
         schedulePreviewRegeneration()
+    }
+
+    func setAutoPreviewRefreshEnabled(_ enabled: Bool) {
+        autoPreviewRefreshEnabled = enabled
+    }
+
+    func setTimelinePreviewEnabled(_ enabled: Bool) {
+        timelinePreviewEnabled = enabled
+    }
+
+    private func interactivePreviewSettings(from settings: RenderSettings) -> RenderSettings {
+        let maxDimension: CGFloat = 1280
+        let width = settings.outputSize.width
+        let height = settings.outputSize.height
+        let currentMax = max(width, height)
+        guard currentMax > maxDimension else { return settings }
+
+        let scale = maxDimension / currentMax
+        let proxyWidth = max(2, Int((width * scale).rounded()) / 2 * 2)
+        let proxyHeight = max(2, Int((height * scale).rounded()) / 2 * 2)
+        let scaleFactor = Double(scale)
+        let scaledLayout = LayoutSettings(
+            horizontalMargin: max(1, settings.layout.horizontalMargin * scaleFactor),
+            topMargin: max(1, settings.layout.topMargin * scaleFactor),
+            bottomMargin: max(1, settings.layout.bottomMargin * scaleFactor),
+            innerPadding: max(1, settings.layout.innerPadding * scaleFactor)
+        )
+        let scaledPlate = PlateSettings(
+            enabled: settings.plate.enabled,
+            height: max(1, settings.plate.height * scaleFactor),
+            baselineOffset: max(1, settings.plate.baselineOffset * scaleFactor),
+            fontSize: max(8, settings.plate.fontSize * scaleFactor),
+            placement: settings.plate.placement
+        )
+
+        return RenderSettings(
+            outputSize: CGSize(width: proxyWidth, height: proxyHeight),
+            fps: settings.fps,
+            imageDuration: settings.imageDuration,
+            transitionDuration: settings.transitionDuration,
+            transitionEnabled: settings.transitionEnabled,
+            transitionStyle: settings.transitionStyle,
+            orientationStrategy: settings.orientationStrategy,
+            enableKenBurns: settings.enableKenBurns,
+            prefetchRadius: settings.prefetchRadius,
+            prefetchMaxConcurrent: settings.prefetchMaxConcurrent,
+            layout: scaledLayout,
+            plate: scaledPlate,
+            canvas: settings.canvas
+        )
     }
 
     private func startExport(request: ExportRequest, fromRetry: Bool) {
@@ -457,6 +902,15 @@ final class ExportViewModel: ObservableObject {
             config.outputWidth = 100
             config.outputHeight = 100
             workflow.setIdleMessage("测试场景：参数无效")
+        case "first_run_ready":
+            imageURLs = [
+                URL(fileURLWithPath: "/tmp/first-run-a.jpg"),
+                URL(fileURLWithPath: "/tmp/first-run-b.jpg")
+            ]
+            outputURL = URL(fileURLWithPath: "/tmp/PhotoTime-FirstRun.mp4")
+            previewImage = NSImage(size: CGSize(width: 320, height: 180))
+            previewStatusMessage = "测试场景：预览已就绪"
+            workflow.setIdleMessage("测试场景：可直接导出")
         default:
             break
         }
@@ -477,6 +931,95 @@ final class ExportViewModel: ObservableObject {
         if !imageURLs.isEmpty, isSettingsValid {
             generatePreview()
         }
+    }
+
+    private func appendImages(_ urls: [URL], source: String) {
+        let incoming = normalizedImageURLs(from: urls)
+        guard !incoming.isEmpty else {
+            workflow.setIdleMessage("未检测到可用图片")
+            return
+        }
+
+        var existing = Set(imageURLs.map(\.standardizedFileURL))
+        var appended: [URL] = []
+
+        for url in incoming {
+            let normalized = url.standardizedFileURL
+            if existing.insert(normalized).inserted {
+                appended.append(normalized)
+            }
+        }
+
+        guard !appended.isEmpty else {
+            workflow.setIdleMessage("未新增素材（已存在）")
+            return
+        }
+
+        imageURLs.append(contentsOf: appended)
+        preflightReport = nil
+        ignoredPreflightIssueKeys = []
+        preflightIssueFilter = .all
+        skippedAssetNamesFromPreflight = []
+        pendingRequestFromPreflight = nil
+        previewImage = nil
+        previewSecond = min(previewSecond, previewMaxSecond)
+        previewStatusMessage = "素材已更新，请生成预览"
+        previewErrorMessage = nil
+        workflow.setIdleMessage("\(source) \(appended.count) 张，共 \(imageURLs.count) 张")
+
+        if isSettingsValid {
+            generatePreview()
+        }
+    }
+
+    private func normalizedImageURLs(from urls: [URL]) -> [URL] {
+        var collected: [URL] = []
+        var seen = Set<URL>()
+
+        for rawURL in urls {
+            let url = rawURL.standardizedFileURL
+            collectImageURLs(from: url, into: &collected, seen: &seen)
+        }
+
+        return collected
+    }
+
+    private func collectImageURLs(from url: URL, into result: inout [URL], seen: inout Set<URL>) {
+        guard seen.insert(url).inserted else { return }
+
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .contentTypeKey])
+        if values?.isDirectory == true {
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .contentTypeKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                return
+            }
+
+            for case let fileURL as URL in enumerator {
+                let standardized = fileURL.standardizedFileURL
+                let fileValues = try? standardized.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .contentTypeKey])
+                guard fileValues?.isRegularFile == true else { continue }
+                guard isSupportedImageURL(standardized, contentType: fileValues?.contentType) else { continue }
+                result.append(standardized)
+            }
+            return
+        }
+
+        guard values?.isRegularFile == true else { return }
+        guard isSupportedImageURL(url, contentType: values?.contentType) else { return }
+        result.append(url)
+    }
+
+    private func isSupportedImageURL(_ url: URL, contentType: UTType?) -> Bool {
+        if let contentType, contentType.conforms(to: .image) {
+            return true
+        }
+        if let inferred = UTType(filenameExtension: url.pathExtension.lowercased()) {
+            return inferred.conforms(to: .image)
+        }
+        return false
     }
 
     var previewMaxSecond: Double {
@@ -514,8 +1057,15 @@ final class ExportViewModel: ObservableObject {
             return "\(head)\n建议动作: \(advice.action.title)\n建议: \(advice.message)\n日志: \(logURL.path)"
         }
 
-        let list = failedAssetNames.joined(separator: ", ")
-        return "\(head)\n失败素材: \(list)\n建议动作: \(advice.action.title)\n建议: \(advice.message)\n日志: \(logURL.path)"
+        let list = failedAssetNames.joined(separator: "、")
+        return """
+        \(head)
+        问题素材: \(list)
+        处理建议: 在素材列表中定位该文件，替换或移除后重试导出
+        建议动作: \(advice.action.title)
+        详细建议: \(advice.message)
+        日志: \(logURL.path)
+        """
     }
 }
 
@@ -526,73 +1076,657 @@ private struct ExportRequest {
 }
 
 struct ContentView: View {
+    private enum CenterPreviewTab: String, CaseIterable, Identifiable {
+        case singleFrame
+        case videoTimeline
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .singleFrame: return "单帧预览"
+            case .videoTimeline: return "视频预览"
+            }
+        }
+    }
+
+    private enum SettingsTab: String, CaseIterable, Identifiable {
+        case simple
+        case advanced
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .simple: return "简单"
+            case .advanced: return "高级"
+            }
+        }
+    }
+
+    private enum ResolutionPreset: String, CaseIterable, Identifiable {
+        case hd720
+        case fullHD1080
+        case qhd1440
+        case uhd4K
+        case custom
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .hd720: return "720p"
+            case .fullHD1080: return "1080p"
+            case .qhd1440: return "1440p"
+            case .uhd4K: return "4K"
+            case .custom: return "自定义"
+            }
+        }
+
+        var size: (width: Int, height: Int)? {
+            switch self {
+            case .hd720: return (1280, 720)
+            case .fullHD1080: return (1920, 1080)
+            case .qhd1440: return (2560, 1440)
+            case .uhd4K: return (3840, 2160)
+            case .custom: return nil
+            }
+        }
+
+        static let simplePresets: [ResolutionPreset] = [.hd720, .fullHD1080, .qhd1440, .uhd4K]
+    }
+
+    private enum ImageDurationPreset: String, CaseIterable, Identifiable {
+        case quick
+        case standard
+        case relaxed
+        case custom
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .quick: return "快节奏"
+            case .standard: return "标准"
+            case .relaxed: return "舒缓"
+            case .custom: return "自定义"
+            }
+        }
+
+        var seconds: Double? {
+            switch self {
+            case .quick: return 1.5
+            case .standard: return 2.5
+            case .relaxed: return 4.0
+            case .custom: return nil
+            }
+        }
+
+        static let simplePresets: [ImageDurationPreset] = [.quick, .standard, .relaxed]
+    }
+
+    private enum TransitionPreset: String, CaseIterable, Identifiable {
+        case off
+        case soft
+        case standard
+        case custom
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .off: return "关闭"
+            case .soft: return "柔和"
+            case .standard: return "标准"
+            case .custom: return "自定义"
+            }
+        }
+
+        var transitionDuration: Double? {
+            switch self {
+            case .off: return 0
+            case .soft: return 0.4
+            case .standard: return 0.8
+            case .custom: return nil
+            }
+        }
+
+        static let simplePresets: [TransitionPreset] = [.off, .soft, .standard]
+    }
+
     @StateObject private var viewModel = ExportViewModel()
+    @State private var centerPreviewTab: CenterPreviewTab = .singleFrame
+    @State private var settingsTab: SettingsTab = .simple
+    @State private var selectedAssetURL: URL?
+    @State private var singlePreviewDebounceTask: Task<Void, Never>?
+    @State private var assetSearchText = ""
+    @State private var isAssetDropTarget = false
+    @State private var draggingAssetURL: URL?
+    @State private var expandedPreflightIssueKeys: Set<String> = []
+    @State private var ignoredIssuesExpanded = false
+    @State private var ignoredIssueSearchText = ""
+    @State private var preflightOnlyPending = true
+    @State private var preflightPrioritizeMustFix = true
+    @State private var preflightSecondaryActionsExpanded = false
+    @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
+    private let commonFPSOptions = [24, 30, 60]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("PhotoTime MVP")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            HStack(alignment: .top, spacing: 12) {
-                GroupBox("主操作") {
-                    HStack(spacing: 10) {
-                        Button("选择图片") { viewModel.chooseImages() }
-                            .accessibilityIdentifier("primary_select_images")
-                            .disabled(!viewModel.actionAvailability.canSelectImages)
-                        Button("选择导出路径") { viewModel.chooseOutput() }
-                            .accessibilityIdentifier("primary_select_output")
-                            .disabled(!viewModel.actionAvailability.canSelectOutput)
-                        Button("导出 MP4") { viewModel.export() }
-                            .accessibilityIdentifier("primary_export")
-                            .disabled(!viewModel.actionAvailability.canStartExport)
-                        Button("取消导出") { viewModel.cancelExport() }
-                            .accessibilityIdentifier("primary_cancel")
-                            .disabled(!viewModel.actionAvailability.canCancelExport)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .accessibilityIdentifier("group_primary_actions")
-
-                GroupBox("辅助操作") {
-                    HStack(spacing: 10) {
-                        Button("生成预览") { viewModel.generatePreview() }
-                            .accessibilityIdentifier("secondary_preview")
-                            .disabled(!viewModel.actionAvailability.canGeneratePreview)
-                        Button("导入模板") { viewModel.importTemplate() }
-                            .accessibilityIdentifier("secondary_import_template")
-                            .disabled(!viewModel.actionAvailability.canImportTemplate)
-                        Button("保存模板") { viewModel.exportTemplate() }
-                            .accessibilityIdentifier("secondary_export_template")
-                            .disabled(!viewModel.actionAvailability.canSaveTemplate)
-                        Button("重试上次导出") { viewModel.retryLastExport() }
-                            .accessibilityIdentifier("secondary_retry_export")
-                            .disabled(!viewModel.actionAvailability.canRetryExport)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .accessibilityIdentifier("group_secondary_actions")
+        NavigationSplitView(columnVisibility: $splitColumnVisibility) {
+            sidebarAssetColumn
+                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
+        } content: {
+            centerPreviewColumn
+                .navigationSplitViewColumnWidth(min: 520, ideal: 680, max: 900)
+        } detail: {
+            rightSettingsColumn
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 460)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .navigationTitle("PhotoTime")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button("选择图片") { viewModel.chooseImages() }
+                    .disabled(!viewModel.actionAvailability.canSelectImages)
+                Button("选择导出路径") { viewModel.chooseOutput() }
+                    .disabled(!viewModel.actionAvailability.canSelectOutput)
+                Button("导出 MP4") { viewModel.export() }
+                    .disabled(!viewModel.canRunExport)
+                Button("取消导出") { viewModel.cancelExport() }
+                    .disabled(!viewModel.actionAvailability.canCancelExport)
             }
+
+            ToolbarItem(placement: .automatic) {
+                Menu("更多") {
+                    Button("生成预览") {
+                        if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
+                            viewModel.generatePreviewForSelectedAsset(selected)
+                        } else {
+                            viewModel.generatePreview()
+                        }
+                    }
+                        .disabled(!viewModel.canRunPreview)
+                    Button("导入模板") { viewModel.importTemplate() }
+                        .disabled(!viewModel.actionAvailability.canImportTemplate)
+                    Button("保存模板") { viewModel.exportTemplate() }
+                        .disabled(!viewModel.actionAvailability.canSaveTemplate)
+                    Button("重试上次导出") { viewModel.retryLastExport() }
+                        .disabled(!viewModel.actionAvailability.canRetryExport)
+                }
+            }
+        }
+        .frame(minWidth: 1200, idealWidth: 1360, minHeight: 720, idealHeight: 860)
+        .onAppear {
+            applyPreviewModePolicy(for: centerPreviewTab)
+            if centerPreviewTab == .singleFrame {
+                scheduleSingleFramePreview()
+            }
+        }
+        .onChange(of: viewModel.configSignature) { _, _ in
+            viewModel.handleConfigChanged()
+            if centerPreviewTab == .singleFrame {
+                scheduleSingleFramePreview()
+            }
+        }
+        .onChange(of: viewModel.imageURLs) { _, urls in
+            guard !urls.isEmpty else {
+                selectedAssetURL = nil
+                if centerPreviewTab == .singleFrame {
+                    scheduleSingleFramePreview()
+                }
+                return
+            }
+            if let selectedAssetURL, urls.contains(selectedAssetURL) {
+                if centerPreviewTab == .singleFrame {
+                    scheduleSingleFramePreview()
+                }
+                return
+            }
+            selectedAssetURL = urls.first
+        }
+        .onChange(of: selectedAssetURL) { _, _ in
+            if centerPreviewTab == .singleFrame {
+                scheduleSingleFramePreview()
+            }
+        }
+        .onChange(of: centerPreviewTab) { _, tab in
+            applyPreviewModePolicy(for: tab)
+            if tab == .singleFrame {
+                scheduleSingleFramePreview()
+            } else {
+                viewModel.generatePreview()
+            }
+        }
+    }
+
+    private var sidebarAssetColumn: some View {
+        ZStack {
+            if viewModel.imageURLs.isEmpty {
+                emptyAssetDropView
+            } else {
+                ScrollView {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 88, maximum: 128), spacing: 10)],
+                        spacing: 10
+                    ) {
+                        ForEach(sidebarFilteredAssets, id: \.self) { url in
+                            assetThumbnailItem(url: url)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+        .background(isAssetDropTarget ? Color.accentColor.opacity(0.12) : Color.clear)
+        .animation(.easeInOut(duration: 0.12), value: isAssetDropTarget)
+        .onDrop(of: [UTType.fileURL], isTargeted: $isAssetDropTarget, perform: handleAssetDrop(providers:))
+        .onDeleteCommand(perform: deleteSelectedAsset)
+        .safeAreaInset(edge: .bottom) {
+            assetBottomBar
+        }
+    }
+
+    private var centerPreviewColumn: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if let validationMessage = viewModel.validationMessage {
+                    Text("参数校验: \(validationMessage)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("settings_validation_message")
+                }
+                Picker("预览模式", selection: $centerPreviewTab) {
+                    ForEach(CenterPreviewTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.imageURLs.isEmpty)
+
+                if centerPreviewTab == .singleFrame {
+                    previewPanel
+                } else {
+                    videoPreviewPanel
+                }
+                workflowPanel
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var rightSettingsColumn: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("参数设置", systemImage: "slider.horizontal.3")
+                    .font(.headline)
+                Text("调整画布、时长、转场和性能参数。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let outputURL = viewModel.outputURL {
+                    Text("输出: \(outputURL.lastPathComponent)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Picker("模式", selection: $settingsTab) {
+                    ForEach(SettingsTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.isBusy)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Divider()
+            settingsPanel
+        }
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var emptyAssetDropView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "photo.stack")
+                .font(.system(size: 28))
+                .foregroundStyle(.secondary)
+            Button("导入图片") {
+                viewModel.addImages()
+            }
+            .buttonStyle(.borderedProminent)
+            Text("支持拖入图片或文件夹")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var assetBottomBar: some View {
+        HStack(spacing: 8) {
+            if !viewModel.imageURLs.isEmpty {
+                TextField("搜索图片", text: $assetSearchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 180)
+
+                Picker("筛选", selection: $viewModel.fileListFilter) {
+                    ForEach(ExportViewModel.FileListFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.menu)
+                .controlSize(.small)
+            }
+
+            Spacer(minLength: 0)
+
+            Text("\(viewModel.problematicAssetNameSet.count) 个问题")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            if !viewModel.imageURLs.isEmpty {
+                Button {
+                    viewModel.addImages()
+                } label: {
+                    Label("添加图片", systemImage: "plus")
+                }
+                .labelStyle(.iconOnly)
+                .help("添加图片")
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private func assetThumbnailItem(url: URL) -> some View {
+        let fileName = url.lastPathComponent
+        let tags = viewModel.preflightIssueTags(for: fileName)
+        let isSelected = selectedAssetURL == url
+
+        return VStack(alignment: .leading, spacing: 4) {
+            ZStack(alignment: .topTrailing) {
+                if let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 72)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                } else {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.1))
+                        .frame(height: 72)
+                }
+
+                if !tags.isEmpty || viewModel.failedAssetNames.contains(fileName) {
+                    Circle()
+                        .fill(tags.contains("必须修复") || viewModel.failedAssetNames.contains(fileName) ? .red : .orange)
+                        .frame(width: 8, height: 8)
+                        .padding(6)
+                }
+            }
+
+            Text(fileName)
+                .font(.caption2)
+                .lineLimit(1)
+        }
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.18), lineWidth: isSelected ? 1.5 : 1)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            selectedAssetURL = url
+        }
+        .contextMenu {
+            Button("删除") {
+                viewModel.removeImage(url)
+                if selectedAssetURL == url {
+                    selectedAssetURL = sidebarFilteredAssets.first
+                }
+            }
+        }
+        .onDrag {
+            draggingAssetURL = url
+            return NSItemProvider(object: NSString(string: url.absoluteString))
+        }
+        .onDrop(
+            of: [.text],
+            delegate: AssetReorderDropDelegate(
+                destination: url,
+                dragging: $draggingAssetURL,
+                canReorder: canReorderAssets
+            ) { source, target in
+                viewModel.reorderImage(from: source, to: target)
+                selectedAssetURL = source
+            }
+        )
+        .help(assetTagLine(fileName: fileName, issueTags: tags))
+    }
+
+    private func deleteSelectedAsset() {
+        guard let selectedAssetURL else { return }
+        viewModel.removeImage(selectedAssetURL)
+        self.selectedAssetURL = sidebarFilteredAssets.first
+    }
+
+    private func handleAssetDrop(providers: [NSItemProvider]) -> Bool {
+        let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !fileProviders.isEmpty else { return false }
+
+        let lock = NSLock()
+        let group = DispatchGroup()
+        var dropped: [URL] = []
+
+        for provider in fileProviders {
+            group.enter()
+            provider.loadObject(ofClass: NSURL.self) { item, _ in
+                defer { group.leave() }
+                guard let item = item as? URL else { return }
+                lock.lock()
+                dropped.append(item)
+                lock.unlock()
+            }
+        }
+
+        group.notify(queue: .main) {
+            viewModel.importDroppedItems(dropped)
+        }
+
+        return true
+    }
+
+    private var sidebarFilteredAssets: [URL] {
+        let baseAssets = sidebarBaseAssets
+        guard !assetSearchText.isEmpty else {
+            return baseAssets
+        }
+        return baseAssets.filter { url in
+            url.lastPathComponent.localizedCaseInsensitiveContains(assetSearchText)
+        }
+    }
+
+    private var sidebarBaseAssets: [URL] {
+        if viewModel.fileListFilter == .all {
+            return viewModel.imageURLs
+        }
+        return viewModel.filteredImageURLsForDisplay
+    }
+
+    private var canReorderAssets: Bool {
+        viewModel.fileListFilter == .all && assetSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func assetTagLine(fileName: String, issueTags: [String]) -> String {
+        var tags = issueTags
+        if viewModel.failedAssetNames.contains(fileName) {
+            tags.append("导出失败")
+        }
+        if viewModel.skippedAssetNamesFromPreflight.contains(fileName) {
+            tags.append("已跳过")
+        }
+        return tags.joined(separator: " · ")
+    }
+
+    private var workflowPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            exportStatusPanel
 
             if let report = viewModel.preflightReport, !report.issues.isEmpty {
                 GroupBox("导出前检查") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(
-                            "已扫描 \(report.scannedCount) 张，必须修复 \(report.blockingIssues.count) 项，建议关注 \(report.reviewIssues.count) 项"
-                        )
-                        .font(.callout)
-
-                        ForEach(Array(report.issues.prefix(6)), id: \.index) { issue in
-                            let tag = issue.severity == .mustFix ? "必须修复" : "建议关注"
-                            Text("[\(tag)] \(issue.fileName): \(issue.message)")
-                                .font(.caption)
-                        }
-
-                        if viewModel.hasBlockingPreflightIssues {
-                            Button("跳过问题素材并导出") {
-                                viewModel.exportSkippingPreflightIssues()
+                        HStack(spacing: 10) {
+                            Button("仅看问题素材") {
+                                if let url = viewModel.focusOnProblematicAssets() {
+                                    selectedAssetURL = url
+                                }
                             }
                             .disabled(viewModel.isBusy)
+
+                            Button("重新检查") {
+                                viewModel.rerunPreflight()
+                            }
+                            .disabled(viewModel.isBusy)
+
+                            if viewModel.hasBlockingPreflightIssues {
+                                Button("跳过问题素材并导出") {
+                                    viewModel.exportSkippingPreflightIssues()
+                                }
+                                .disabled(viewModel.isBusy)
+                            }
+                        }
+
+                        DisclosureGroup("次级选项", isExpanded: $preflightSecondaryActionsExpanded) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Picker("问题筛选", selection: $viewModel.preflightIssueFilter) {
+                                    ForEach(ExportViewModel.PreflightIssueFilter.allCases) { filter in
+                                        Text(filter.title).tag(filter)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .frame(maxWidth: 320)
+                                .controlSize(.small)
+
+                                HStack(spacing: 12) {
+                                    Toggle("仅未处理", isOn: $preflightOnlyPending)
+                                    Toggle("严重优先", isOn: $preflightPrioritizeMustFix)
+                                }
+                                .toggleStyle(.checkbox)
+                                .font(.caption)
+                                .controlSize(.small)
+
+                                HStack(spacing: 10) {
+                                    Button("展开全部") {
+                                        expandedPreflightIssueKeys.formUnion(preflightDisplayIssues(report: report).map(\.ignoreKey))
+                                    }
+                                    .font(.caption)
+                                    .disabled(preflightDisplayIssues(report: report).isEmpty)
+
+                                    Button("收起全部") {
+                                        expandedPreflightIssueKeys.subtract(preflightDisplayIssues(report: report).map(\.ignoreKey))
+                                    }
+                                    .font(.caption)
+                                    .disabled(preflightDisplayIssues(report: report).isEmpty)
+                                }
+                                .controlSize(.small)
+
+                                ForEach(preflightDisplayIssues(report: report), id: \.ignoreKey) { issue in
+                                    DisclosureGroup(
+                                        isExpanded: preflightIssueExpandedBinding(for: issue.ignoreKey)
+                                    ) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            Text(issue.message)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                            HStack(spacing: 10) {
+                                                Button(viewModel.isIssueIgnored(issue) ? "恢复" : "忽略本次") {
+                                                    viewModel.toggleIgnoreIssue(issue)
+                                                }
+                                                .font(.caption)
+                                                .disabled(viewModel.isBusy)
+                                                Button("定位") {
+                                                    if let url = viewModel.focusAssetForIssue(issue) {
+                                                        selectedAssetURL = url
+                                                    }
+                                                }
+                                                .font(.caption)
+                                                .disabled(viewModel.isBusy)
+                                            }
+                                        }
+                                        .padding(.top, 2)
+                                    } label: {
+                                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                            Text("[\(issue.severity == .mustFix ? "必须修复" : "建议关注")]")
+                                                .font(.caption)
+                                                .foregroundStyle(issue.severity == .mustFix ? .red : .orange)
+                                            Text(issue.fileName)
+                                                .font(.caption)
+                                                .lineLimit(1)
+                                            Text(issue.message)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                }
+
+                                if viewModel.ignoredIssueCount > 0 {
+                                    DisclosureGroup(
+                                        "已忽略 \(viewModel.ignoredIssueCount) 项（本次）",
+                                        isExpanded: $ignoredIssuesExpanded
+                                    ) {
+                                        VStack(alignment: .leading, spacing: 6) {
+                                            TextField("搜索已忽略文件名", text: $ignoredIssueSearchText)
+                                                .textFieldStyle(.roundedBorder)
+                                                .font(.caption)
+                                                .frame(maxWidth: 280)
+
+                                            HStack(spacing: 10) {
+                                                Button("恢复全部") {
+                                                    viewModel.restoreAllIgnoredIssues()
+                                                    ignoredIssueSearchText = ""
+                                                }
+                                                .font(.caption)
+                                                .disabled(viewModel.isBusy)
+                                                Text("显示 \(filteredIgnoredIssues.count) / \(viewModel.ignoredIssueCount)")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+
+                                            ForEach(filteredIgnoredIssues.prefix(5), id: \.ignoreKey) { issue in
+                                                HStack(spacing: 8) {
+                                                    Text(issue.fileName)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                        .lineLimit(1)
+                                                    Button("恢复") {
+                                                        viewModel.toggleIgnoreIssue(issue)
+                                                    }
+                                                    .font(.caption)
+                                                    .disabled(viewModel.isBusy)
+                                                }
+                                            }
+
+                                            if filteredIgnoredIssues.isEmpty {
+                                                Text("没有匹配的已忽略项。")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(.top, 2)
+                                    }
+                                }
+
+                            }
+                            .padding(.top, 4)
                         }
 
                         if !viewModel.skippedAssetNamesFromPreflight.isEmpty {
@@ -605,72 +1739,18 @@ struct ContentView: View {
                     .padding(.vertical, 2)
                 }
             }
+        }
+    }
 
-            GroupBox("预览") {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 12) {
-                        Text("时间: \(viewModel.previewSecond, specifier: "%.2f")s")
-                        Slider(
-                            value: $viewModel.previewSecond,
-                            in: 0...max(viewModel.previewMaxSecond, 0.001)
-                        )
-                        .onChange(of: viewModel.previewSecond) { _, _ in
-                            viewModel.schedulePreviewRegeneration()
-                        }
-                        .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
-                    }
-
-                    if let preview = viewModel.previewImage {
-                        Image(nsImage: preview)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity, maxHeight: 260)
-                            .padding(.vertical, 4)
-                    } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.secondary.opacity(0.08))
-                            .frame(maxWidth: .infinity, minHeight: 140, maxHeight: 140)
-                            .overlay(
-                                Text("暂无预览画面")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            )
-                    }
-
-                    HStack(spacing: 8) {
-                        if viewModel.isPreviewGenerating {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text(viewModel.previewStatusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let previewError = viewModel.previewErrorMessage {
-                        Text("预览错误: \(previewError)")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                }
-            }
-
-            if !viewModel.imageURLs.isEmpty {
-                Text("已选文件")
-                    .font(.headline)
-                List(viewModel.imageURLs, id: \.self) { url in
-                    Text(url.lastPathComponent)
-                }
-                .frame(height: 220)
-            }
-
+    private var exportStatusPanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
             if viewModel.isExporting {
                 ProgressView(value: viewModel.progress)
                     .frame(maxWidth: .infinity)
             }
 
             if viewModel.hasFailureCard, let advice = viewModel.recoveryAdvice {
-                GroupBox("导出失败（可恢复）") {
+                GroupBox("导出失败") {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("推荐动作: \(advice.action.title)")
                             .font(.subheadline.weight(.semibold))
@@ -686,13 +1766,12 @@ struct ContentView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 2)
                 }
                 .accessibilityIdentifier("failure_card")
             }
 
             if viewModel.hasSuccessCard {
-                GroupBox("导出完成（下一步）") {
+                GroupBox("导出成功") {
                     VStack(alignment: .leading, spacing: 8) {
                         if let filename = viewModel.latestOutputFilename {
                             Text("文件: \(filename)")
@@ -715,82 +1794,522 @@ struct ContentView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 2)
                 }
                 .accessibilityIdentifier("success_card")
             }
 
             if !viewModel.failedAssetNames.isEmpty {
-                GroupBox("失败素材") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(viewModel.failedAssetNames, id: \.self) { name in
-                            Text(name)
-                                .font(.callout)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("失败素材")
+                        .font(.subheadline.weight(.semibold))
+                    ForEach(failedAssetNamesPreview, id: \.self) { name in
+                        Text(name)
+                            .font(.callout)
+                    }
+                    if failedAssetHiddenCount > 0 {
+                        Text("另有 \(failedAssetHiddenCount) 项失败素材，可在“素材列表”查看全部。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private func preflightIssueExpandedBinding(for key: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedPreflightIssueKeys.contains(key) },
+            set: { newValue in
+                if newValue {
+                    expandedPreflightIssueKeys.insert(key)
+                } else {
+                    expandedPreflightIssueKeys.remove(key)
+                }
+            }
+        )
+    }
+
+    private var failedAssetNamesPreview: [String] {
+        Array(viewModel.failedAssetNames.prefix(3))
+    }
+
+    private var failedAssetHiddenCount: Int {
+        max(0, viewModel.failedAssetNames.count - failedAssetNamesPreview.count)
+    }
+
+    private func preflightIssuesForDisplay(report: PreflightReport) -> [PreflightIssue] {
+        var issues = report.issues
+        if preflightOnlyPending {
+            issues = issues.filter { !viewModel.isIssueIgnored($0) }
+        }
+        if viewModel.preflightIssueFilter == .mustFix {
+            issues = issues.filter { $0.severity == .mustFix }
+        } else if viewModel.preflightIssueFilter == .review {
+            issues = issues.filter { $0.severity == .shouldReview }
+        }
+        if preflightPrioritizeMustFix {
+            issues.sort { lhs, rhs in
+                if lhs.severity != rhs.severity {
+                    return lhs.severity == .mustFix
+                }
+                return lhs.index < rhs.index
+            }
+        }
+        return issues
+    }
+
+    private func preflightDisplayIssues(report: PreflightReport) -> [PreflightIssue] {
+        Array(preflightIssuesForDisplay(report: report).prefix(6))
+    }
+
+    private var filteredIgnoredIssues: [PreflightIssue] {
+        viewModel.ignoredPreflightIssues.filter { issue in
+            ignoredIssueSearchText.isEmpty || issue.fileName.localizedCaseInsensitiveContains(ignoredIssueSearchText)
+        }
+    }
+
+    private var selectedAssetForPreview: URL? {
+        if let selectedAssetURL, viewModel.imageURLs.contains(selectedAssetURL) {
+            return selectedAssetURL
+        }
+        return viewModel.imageURLs.first
+    }
+
+    private func scheduleSingleFramePreview() {
+        guard !viewModel.isBusy else { return }
+        guard viewModel.validationMessage == nil else { return }
+        guard let selected = selectedAssetForPreview else { return }
+
+        singlePreviewDebounceTask?.cancel()
+        singlePreviewDebounceTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 120_000_000)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                viewModel.generatePreviewForSelectedAsset(selected)
+            }
+        }
+    }
+
+    private func applyPreviewModePolicy(for tab: CenterPreviewTab) {
+        switch tab {
+        case .singleFrame:
+            viewModel.setTimelinePreviewEnabled(false)
+            viewModel.setAutoPreviewRefreshEnabled(false)
+        case .videoTimeline:
+            viewModel.setTimelinePreviewEnabled(true)
+            viewModel.setAutoPreviewRefreshEnabled(true)
+        }
+    }
+
+    private var previewPanel: some View {
+        GroupBox("单张预览") {
+            VStack(alignment: .leading, spacing: 12) {
+                if let preview = viewModel.previewImage {
+                    Image(nsImage: preview)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                        .padding(.vertical, 4)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.08))
+                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                        .overlay(Image(systemName: "photo"))
+                }
+
+                if viewModel.isPreviewGenerating {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                if let previewError = viewModel.previewErrorMessage {
+                    Text("预览错误: \(previewError)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+            }
+        }
+    }
+
+    private var videoPreviewPanel: some View {
+        GroupBox("视频预览") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Text("时间: \(viewModel.previewSecond, specifier: "%.2f")s")
+                    Slider(
+                        value: $viewModel.previewSecond,
+                        in: 0...max(viewModel.previewMaxSecond, 0.001)
+                    )
+                    .onChange(of: viewModel.previewSecond) { _, _ in
+                        viewModel.schedulePreviewRegeneration()
+                    }
+                    .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                }
+
+                if let preview = viewModel.previewImage {
+                    Image(nsImage: preview)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                        .padding(.vertical, 4)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.08))
+                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                        .overlay(Image(systemName: "film"))
+                }
+
+                if viewModel.isPreviewGenerating {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                if let previewError = viewModel.previewErrorMessage {
+                    Text("预览错误: \(previewError)")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var settingsPanel: some View {
+        Group {
+            if settingsTab == .simple {
+                simpleSettingsPanel
+            } else {
+                advancedSettingsPanel
+            }
+        }
+    }
+
+    private var simpleSettingsPanel: some View {
+        Form {
+            Section("常用参数") {
+                Picker("分辨率", selection: resolutionPresetBinding) {
+                    ForEach(ResolutionPreset.simplePresets) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .disabled(viewModel.isBusy)
+
+                fpsPicker
+
+                Picker("展示节奏", selection: imageDurationPresetBinding) {
+                    ForEach(ImageDurationPreset.simplePresets) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.isBusy)
+
+                Picker("转场", selection: transitionPresetBinding) {
+                    ForEach(TransitionPreset.simplePresets) { preset in
+                        Text(preset.title).tag(preset)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.isBusy)
+
+                Toggle("启用 Ken Burns", isOn: $viewModel.config.enableKenBurns)
+                    .disabled(viewModel.isBusy)
+
+                Toggle("显示底部铭牌文字", isOn: $viewModel.config.plateEnabled)
+                    .disabled(viewModel.isBusy)
+
+                Picker("信息位置", selection: $viewModel.config.platePlacement) {
+                    Text("相框").tag(PlatePlacement.frame)
+                    Text("黑底下方").tag(PlatePlacement.canvasBottom)
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.isBusy || !viewModel.config.plateEnabled)
+            }
+
+            Section("风格") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("横竖图策略")
+                        .font(.subheadline.weight(.medium))
+                    HStack(spacing: 8) {
+                        orientationQuickChoiceButton(
+                            title: PhotoOrientationStrategy.followAsset.displayName,
+                            strategy: .followAsset
+                        )
+                        orientationQuickChoiceButton(
+                            title: PhotoOrientationStrategy.forceLandscape.displayName,
+                            strategy: .forceLandscape
+                        )
+                        orientationQuickChoiceButton(
+                            title: PhotoOrientationStrategy.forcePortrait.displayName,
+                            strategy: .forcePortrait
+                        )
+                    }
+                }
+                .disabled(viewModel.isBusy)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("相框风格")
+                        .font(.subheadline.weight(.medium))
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
+                        ForEach(FrameStylePreset.allCases.filter { $0 != .custom }, id: \.self) { preset in
+                            frameStyleQuickChoiceButton(
+                                title: preset.displayName,
+                                preset: preset
+                            )
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 2)
                 }
+                .disabled(viewModel.isBusy)
             }
-
-            GroupBox("性能设置") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Stepper("预取半径: \(viewModel.config.prefetchRadius)", value: $viewModel.config.prefetchRadius, in: RenderEditorConfig.prefetchRadiusRange)
-                        .disabled(viewModel.isBusy)
-                    Stepper("预取并发: \(viewModel.config.prefetchMaxConcurrent)", value: $viewModel.config.prefetchMaxConcurrent, in: RenderEditorConfig.prefetchMaxConcurrentRange)
-                        .disabled(viewModel.isBusy)
-                }
-                .padding(.vertical, 4)
-            }
-
-            GroupBox("导出设置") {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 12) {
-                        Stepper("宽: \(viewModel.config.outputWidth)", value: $viewModel.config.outputWidth, in: RenderEditorConfig.outputWidthRange, step: 2)
-                            .disabled(viewModel.isBusy)
-                        Stepper("高: \(viewModel.config.outputHeight)", value: $viewModel.config.outputHeight, in: RenderEditorConfig.outputHeightRange, step: 2)
-                            .disabled(viewModel.isBusy)
-                    }
-                    Stepper("FPS: \(viewModel.config.fps)", value: $viewModel.config.fps, in: RenderEditorConfig.fpsRange)
-                        .disabled(viewModel.isBusy)
-                    HStack(spacing: 12) {
-                        Text("单图时长: \(viewModel.config.imageDuration, specifier: "%.2f")s")
-                        Slider(value: $viewModel.config.imageDuration, in: RenderEditorConfig.imageDurationRange, step: 0.1)
-                            .disabled(viewModel.isBusy)
-                    }
-                    HStack(spacing: 12) {
-                        Toggle("启用淡入淡出转场", isOn: $viewModel.config.enableCrossfade)
-                            .disabled(viewModel.isBusy)
-                        Spacer(minLength: 0)
-                    }
-                    HStack(spacing: 12) {
-                        Text("转场时长: \(viewModel.config.transitionDuration, specifier: "%.2f")s")
-                        Slider(value: $viewModel.config.transitionDuration, in: RenderEditorConfig.transitionDurationRange, step: 0.05)
-                            .disabled(viewModel.isBusy || !viewModel.config.enableCrossfade)
-                    }
-                    Toggle("启用 Ken Burns", isOn: $viewModel.config.enableKenBurns)
-                        .disabled(viewModel.isBusy)
-
-                    if let validationMessage = viewModel.validationMessage {
-                        Text("参数校验: \(validationMessage)")
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .accessibilityIdentifier("settings_validation_message")
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-
-            Text(viewModel.statusMessage)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
         }
-        .padding(20)
-        .frame(minWidth: 720, minHeight: 520)
-        .onChange(of: viewModel.configSignature) { _, _ in
-            viewModel.handleConfigChanged()
+        .formStyle(.grouped)
+    }
+
+    private var advancedSettingsPanel: some View {
+        Form {
+            Section("导出设置") {
+                Stepper("宽: \(viewModel.config.outputWidth)", value: $viewModel.config.outputWidth, in: RenderEditorConfig.outputWidthRange, step: 2)
+                    .disabled(viewModel.isBusy)
+                Stepper("高: \(viewModel.config.outputHeight)", value: $viewModel.config.outputHeight, in: RenderEditorConfig.outputHeightRange, step: 2)
+                    .disabled(viewModel.isBusy)
+                fpsPicker
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("单图时长: \(viewModel.config.imageDuration, specifier: "%.2f")s")
+                    Slider(value: $viewModel.config.imageDuration, in: RenderEditorConfig.imageDurationRange, step: 0.1)
+                        .disabled(viewModel.isBusy)
+                }
+                Picker("横竖图策略", selection: $viewModel.config.orientationStrategy) {
+                    Text(PhotoOrientationStrategy.followAsset.displayName).tag(PhotoOrientationStrategy.followAsset)
+                    Text(PhotoOrientationStrategy.forceLandscape.displayName).tag(PhotoOrientationStrategy.forceLandscape)
+                    Text(PhotoOrientationStrategy.forcePortrait.displayName).tag(PhotoOrientationStrategy.forcePortrait)
+                }
+                .disabled(viewModel.isBusy)
+                Picker("相框风格", selection: $viewModel.config.frameStylePreset) {
+                    ForEach(FrameStylePreset.allCases, id: \.self) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .disabled(viewModel.isBusy)
+                if viewModel.config.frameStylePreset == .custom {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("背景灰度: \(viewModel.config.canvasBackgroundGray, specifier: "%.2f")")
+                        Slider(value: $viewModel.config.canvasBackgroundGray, in: RenderEditorConfig.grayRange, step: 0.01)
+                            .disabled(viewModel.isBusy)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("相纸亮度: \(viewModel.config.canvasPaperWhite, specifier: "%.2f")")
+                        Slider(value: $viewModel.config.canvasPaperWhite, in: RenderEditorConfig.grayRange, step: 0.01)
+                            .disabled(viewModel.isBusy)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("边框灰度: \(viewModel.config.canvasStrokeGray, specifier: "%.2f")")
+                        Slider(value: $viewModel.config.canvasStrokeGray, in: RenderEditorConfig.grayRange, step: 0.01)
+                            .disabled(viewModel.isBusy)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("文字灰度: \(viewModel.config.canvasTextGray, specifier: "%.2f")")
+                        Slider(value: $viewModel.config.canvasTextGray, in: RenderEditorConfig.grayRange, step: 0.01)
+                            .disabled(viewModel.isBusy)
+                    }
+                }
+                Toggle("启用淡入淡出转场", isOn: $viewModel.config.enableCrossfade)
+                    .disabled(viewModel.isBusy)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("转场时长: \(viewModel.config.transitionDuration, specifier: "%.2f")s")
+                    Slider(value: $viewModel.config.transitionDuration, in: RenderEditorConfig.transitionDurationRange, step: 0.05)
+                        .disabled(viewModel.isBusy || !viewModel.config.enableCrossfade)
+                }
+                Toggle("启用 Ken Burns", isOn: $viewModel.config.enableKenBurns)
+                    .disabled(viewModel.isBusy)
+            }
+
+            Section("高级布局") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("左右留白: \(viewModel.config.horizontalMargin, specifier: "%.0f")")
+                    Slider(value: $viewModel.config.horizontalMargin, in: RenderEditorConfig.horizontalMarginRange, step: 1)
+                        .disabled(viewModel.isBusy)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("上留白: \(viewModel.config.topMargin, specifier: "%.0f")")
+                    Slider(value: $viewModel.config.topMargin, in: RenderEditorConfig.topMarginRange, step: 1)
+                        .disabled(viewModel.isBusy)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("下留白: \(viewModel.config.bottomMargin, specifier: "%.0f")")
+                    Slider(value: $viewModel.config.bottomMargin, in: RenderEditorConfig.bottomMarginRange, step: 1)
+                        .disabled(viewModel.isBusy)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("内边距: \(viewModel.config.innerPadding, specifier: "%.0f")")
+                    Slider(value: $viewModel.config.innerPadding, in: RenderEditorConfig.innerPaddingRange, step: 1)
+                        .disabled(viewModel.isBusy)
+                }
+                Toggle("显示底部铭牌文字", isOn: $viewModel.config.plateEnabled)
+                    .disabled(viewModel.isBusy)
+                Picker("信息位置", selection: $viewModel.config.platePlacement) {
+                    Text("相框").tag(PlatePlacement.frame)
+                    Text("黑底下方").tag(PlatePlacement.canvasBottom)
+                }
+                .disabled(viewModel.isBusy || !viewModel.config.plateEnabled)
+            }
+
+            Section("性能设置") {
+                Stepper("预取半径: \(viewModel.config.prefetchRadius)", value: $viewModel.config.prefetchRadius, in: RenderEditorConfig.prefetchRadiusRange)
+                    .disabled(viewModel.isBusy)
+                Stepper("预取并发: \(viewModel.config.prefetchMaxConcurrent)", value: $viewModel.config.prefetchMaxConcurrent, in: RenderEditorConfig.prefetchMaxConcurrentRange)
+                    .disabled(viewModel.isBusy)
+            }
         }
+        .formStyle(.grouped)
+    }
+
+    private var fpsPicker: some View {
+        Picker("FPS", selection: $viewModel.config.fps) {
+            ForEach(commonFPSOptions, id: \.self) { fps in
+                Text("\(fps)").tag(fps)
+            }
+        }
+        .pickerStyle(.segmented)
+        .disabled(viewModel.isBusy)
+    }
+
+    private var resolutionPresetBinding: Binding<ResolutionPreset> {
+        Binding(
+            get: {
+                switch (viewModel.config.outputWidth, viewModel.config.outputHeight) {
+                case (1280, 720): return .hd720
+                case (1920, 1080): return .fullHD1080
+                case (2560, 1440): return .qhd1440
+                case (3840, 2160): return .uhd4K
+                default: return .fullHD1080
+                }
+            },
+            set: { preset in
+                guard let size = preset.size else { return }
+                viewModel.config.outputWidth = size.width
+                viewModel.config.outputHeight = size.height
+            }
+        )
+    }
+
+    private var imageDurationPresetBinding: Binding<ImageDurationPreset> {
+        Binding(
+            get: {
+                let value = viewModel.config.imageDuration
+                let options: [(ImageDurationPreset, Double)] = [(.quick, 1.5), (.standard, 2.5), (.relaxed, 4.0)]
+                return options.min(by: { abs($0.1 - value) < abs($1.1 - value) })?.0 ?? .standard
+            },
+            set: { preset in
+                guard let seconds = preset.seconds else { return }
+                viewModel.config.imageDuration = seconds
+            }
+        )
+    }
+
+    private var transitionPresetBinding: Binding<TransitionPreset> {
+        Binding(
+            get: {
+                if !viewModel.config.enableCrossfade || viewModel.config.transitionDuration <= 0.001 {
+                    return .off
+                }
+                let duration = viewModel.config.transitionDuration
+                let options: [(TransitionPreset, Double)] = [(.soft, 0.4), (.standard, 0.8)]
+                return options.min(by: { abs($0.1 - duration) < abs($1.1 - duration) })?.0 ?? .standard
+            },
+            set: { preset in
+                switch preset {
+                case .off:
+                    viewModel.config.enableCrossfade = false
+                    viewModel.config.transitionDuration = 0
+                case .soft, .standard:
+                    viewModel.config.enableCrossfade = true
+                    if let duration = preset.transitionDuration {
+                        viewModel.config.transitionDuration = duration
+                    }
+                case .custom: break
+                }
+            }
+        )
+    }
+
+    private func orientationQuickChoiceButton(
+        title: String,
+        strategy: PhotoOrientationStrategy
+    ) -> some View {
+        let isSelected = viewModel.config.orientationStrategy == strategy
+        return Button {
+            viewModel.config.orientationStrategy = strategy
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08))
+                Text(title)
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7)
+                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: isSelected ? 1.4 : 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func frameStyleQuickChoiceButton(
+        title: String,
+        preset: FrameStylePreset
+    ) -> some View {
+        let isSelected = viewModel.config.frameStylePreset == preset
+        return Button {
+            viewModel.config.frameStylePreset = preset
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.accentColor.opacity(0.16) : Color.secondary.opacity(0.08))
+                Text(title)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: isSelected ? 1.4 : 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct AssetReorderDropDelegate: DropDelegate {
+    let destination: URL
+    @Binding var dragging: URL?
+    let canReorder: Bool
+    let onMove: (URL, URL) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard canReorder else { return }
+        guard let dragging, dragging != destination else { return }
+        onMove(dragging, destination)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        canReorder ? DropProposal(operation: .move) : DropProposal(operation: .copy)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
     }
 }
 

@@ -3,6 +3,7 @@ import Foundation
 import Testing
 @testable import PhotoTime
 
+@MainActor
 struct RenderTemplateTests {
     @Test
     func templateRoundTripPreservesSettings() throws {
@@ -13,11 +14,12 @@ struct RenderTemplateTests {
             transitionDuration: 0.5,
             transitionEnabled: false,
             transitionStyle: .crossfade,
+            orientationStrategy: .forceLandscape,
             enableKenBurns: true,
             prefetchRadius: 2,
             prefetchMaxConcurrent: 3,
             layout: LayoutSettings(horizontalMargin: 160, topMargin: 60, bottomMargin: 84, innerPadding: 20),
-            plate: PlateSettings(enabled: true, height: 88, baselineOffset: 16, fontSize: 24),
+            plate: PlateSettings(enabled: true, height: 88, baselineOffset: 16, fontSize: 24, placement: .frame),
             canvas: CanvasSettings(backgroundGray: 0.12, paperWhite: 0.97, strokeGray: 0.8, textGray: 0.2)
         )
 
@@ -35,6 +37,7 @@ struct RenderTemplateTests {
         #expect(rebuilt.transitionEnabled == false)
         #expect(rebuilt.effectiveTransitionDuration == 0)
         #expect(rebuilt.transitionStyle == .crossfade)
+        #expect(rebuilt.orientationStrategy == .forceLandscape)
         #expect(rebuilt.enableKenBurns)
         #expect(rebuilt.prefetchRadius == 2)
         #expect(rebuilt.prefetchMaxConcurrent == 3)
@@ -46,6 +49,7 @@ struct RenderTemplateTests {
         #expect(rebuilt.plate.height == 88)
         #expect(rebuilt.plate.baselineOffset == 16)
         #expect(rebuilt.plate.fontSize == 24)
+        #expect(rebuilt.plate.placement == .frame)
         #expect(rebuilt.canvas.backgroundGray == 0.12)
         #expect(rebuilt.canvas.paperWhite == 0.97)
         #expect(rebuilt.canvas.strokeGray == 0.8)
@@ -84,6 +88,7 @@ struct RenderTemplateTests {
         #expect(settings.prefetchMaxConcurrent == 1)
         #expect(settings.transitionStyle == .crossfade)
         #expect(settings.transitionEnabled == true)
+        #expect(settings.orientationStrategy == .followAsset)
         #expect(settings.layout.horizontalMargin == LayoutSettings.default.horizontalMargin)
         #expect(settings.layout.topMargin == LayoutSettings.default.topMargin)
         #expect(settings.layout.bottomMargin == LayoutSettings.default.bottomMargin)
@@ -92,6 +97,7 @@ struct RenderTemplateTests {
         #expect(settings.plate.height == PlateSettings.default.height)
         #expect(settings.plate.baselineOffset == PlateSettings.default.baselineOffset)
         #expect(settings.plate.fontSize == PlateSettings.default.fontSize)
+        #expect(settings.plate.placement == PlateSettings.default.placement)
         #expect(settings.canvas.backgroundGray == CanvasSettings.default.backgroundGray)
         #expect(settings.canvas.paperWhite == CanvasSettings.default.paperWhite)
         #expect(settings.canvas.strokeGray == CanvasSettings.default.strokeGray)
@@ -130,5 +136,27 @@ struct RenderTemplateTests {
 
         #expect(settings.transitionEnabled == true)
         #expect(settings.effectiveTransitionDuration == settings.transitionDuration)
+        #expect(settings.orientationStrategy == .followAsset)
+    }
+
+    @Test
+    func editorConfigInfersPresetFromTemplateCanvas() throws {
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1920, height: 1080),
+            fps: 30,
+            imageDuration: 3.0,
+            transitionDuration: 0.6,
+            transitionEnabled: true,
+            transitionStyle: .crossfade,
+            enableKenBurns: true,
+            prefetchRadius: 1,
+            prefetchMaxConcurrent: 2,
+            layout: .default,
+            plate: .default,
+            canvas: FrameStylePreset.soft.canvas
+        )
+
+        let config = RenderEditorConfig(template: settings.template)
+        #expect(config.frameStylePreset == .soft)
     }
 }

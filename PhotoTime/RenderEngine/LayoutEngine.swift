@@ -15,7 +15,6 @@ enum LayoutEngine {
         let horizontalMargin = CGFloat(settings.layout.horizontalMargin)
         let topMargin = CGFloat(settings.layout.topMargin)
         let bottomMargin = CGFloat(settings.layout.bottomMargin)
-        let plateHeight = settings.plate.enabled ? CGFloat(settings.plate.height) : 0
         let innerPadding = CGFloat(settings.layout.innerPadding)
 
         let paperWidth = outputSize.width - horizontalMargin * 2
@@ -27,18 +26,15 @@ enum LayoutEngine {
             height: paperHeight
         )
 
-        let photoRect = CGRect(
-            x: paperRect.minX + innerPadding,
-            y: paperRect.minY + plateHeight + innerPadding,
-            width: paperRect.width - innerPadding * 2,
-            height: paperRect.height - plateHeight - innerPadding * 2
-        )
+        // Frame should directly wrap the photo; canvas relation is controlled by top/bottom/horizontal margins.
+        let photoRect = paperRect
 
+        let plateHeight = settings.plate.enabled ? CGFloat(settings.plate.height) : 0
         let plateTextHeight = max(plateHeight - CGFloat(settings.plate.baselineOffset) * 2, 0)
         let plateTextRect = CGRect(
-            x: paperRect.minX + innerPadding,
-            y: paperRect.minY + CGFloat(settings.plate.baselineOffset),
-            width: paperRect.width - innerPadding * 2,
+            x: photoRect.minX + innerPadding,
+            y: photoRect.minY + CGFloat(settings.plate.baselineOffset),
+            width: photoRect.width - innerPadding * 2,
             height: plateTextHeight
         )
 

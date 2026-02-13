@@ -6,6 +6,17 @@ enum TransitionStyle: String, Codable, Sendable {
     case crossfade
 }
 
+enum PhotoOrientationStrategy: String, Codable, Sendable {
+    case followAsset
+    case forceLandscape
+    case forcePortrait
+}
+
+enum PlatePlacement: String, Codable, Sendable {
+    case frame
+    case canvasBottom
+}
+
 struct LayoutSettings: Codable, Sendable {
     let horizontalMargin: Double
     let topMargin: Double
@@ -25,12 +36,14 @@ struct PlateSettings: Codable, Sendable {
     let height: Double
     let baselineOffset: Double
     let fontSize: Double
+    let placement: PlatePlacement
 
     nonisolated static let `default` = PlateSettings(
         enabled: true,
         height: 96,
         baselineOffset: 18,
-        fontSize: 26
+        fontSize: 26,
+        placement: .frame
     )
 }
 
@@ -55,6 +68,7 @@ struct RenderSettings {
     let transitionDuration: TimeInterval
     let transitionEnabled: Bool
     let transitionStyle: TransitionStyle
+    let orientationStrategy: PhotoOrientationStrategy
     let enableKenBurns: Bool
     let prefetchRadius: Int
     let prefetchMaxConcurrent: Int
@@ -69,6 +83,7 @@ struct RenderSettings {
         transitionDuration: TimeInterval,
         transitionEnabled: Bool = true,
         transitionStyle: TransitionStyle = .crossfade,
+        orientationStrategy: PhotoOrientationStrategy = .followAsset,
         enableKenBurns: Bool,
         prefetchRadius: Int = 1,
         prefetchMaxConcurrent: Int = 2,
@@ -82,6 +97,7 @@ struct RenderSettings {
         self.transitionDuration = transitionDuration
         self.transitionEnabled = transitionEnabled
         self.transitionStyle = transitionStyle
+        self.orientationStrategy = orientationStrategy
         self.enableKenBurns = enableKenBurns
         self.prefetchRadius = max(0, prefetchRadius)
         self.prefetchMaxConcurrent = max(1, prefetchMaxConcurrent)
@@ -97,6 +113,7 @@ struct RenderSettings {
         transitionDuration: 0.6,
         transitionEnabled: true,
         transitionStyle: .crossfade,
+        orientationStrategy: .followAsset,
         enableKenBurns: true,
         prefetchRadius: 1,
         prefetchMaxConcurrent: 2,
@@ -113,6 +130,7 @@ struct RenderSettings {
             transitionDuration: template.timeline.transitionDuration,
             transitionEnabled: template.transition.enabled,
             transitionStyle: template.transition.style,
+            orientationStrategy: template.motion.orientationStrategy,
             enableKenBurns: template.motion.enableKenBurns,
             prefetchRadius: template.performance.prefetchRadius,
             prefetchMaxConcurrent: template.performance.prefetchMaxConcurrent,
@@ -126,7 +144,8 @@ struct RenderSettings {
                 enabled: template.plate.enabled,
                 height: template.plate.height,
                 baselineOffset: template.plate.baselineOffset,
-                fontSize: template.plate.fontSize
+                fontSize: template.plate.fontSize,
+                placement: template.plate.placement
             ),
             canvas: .init(
                 backgroundGray: template.canvas.backgroundGray,
@@ -149,7 +168,7 @@ struct RenderSettings {
                 transitionDuration: transitionDuration
             ),
             transition: .init(style: transitionStyle, enabled: transitionEnabled),
-            motion: .init(enableKenBurns: enableKenBurns),
+            motion: .init(enableKenBurns: enableKenBurns, orientationStrategy: orientationStrategy),
             performance: .init(
                 prefetchRadius: prefetchRadius,
                 prefetchMaxConcurrent: prefetchMaxConcurrent
@@ -164,7 +183,8 @@ struct RenderSettings {
                 enabled: plate.enabled,
                 height: plate.height,
                 baselineOffset: plate.baselineOffset,
-                fontSize: plate.fontSize
+                fontSize: plate.fontSize,
+                placement: plate.placement
             ),
             canvas: .init(
                 backgroundGray: canvas.backgroundGray,
@@ -276,6 +296,23 @@ struct RenderTemplate: Codable, Sendable {
 
     struct Motion: Codable, Sendable {
         let enableKenBurns: Bool
+        let orientationStrategy: PhotoOrientationStrategy
+
+        private enum CodingKeys: String, CodingKey {
+            case enableKenBurns
+            case orientationStrategy
+        }
+
+        nonisolated init(enableKenBurns: Bool, orientationStrategy: PhotoOrientationStrategy = .followAsset) {
+            self.enableKenBurns = enableKenBurns
+            self.orientationStrategy = orientationStrategy
+        }
+
+        nonisolated init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enableKenBurns = try container.decode(Bool.self, forKey: .enableKenBurns)
+            orientationStrategy = try container.decodeIfPresent(PhotoOrientationStrategy.self, forKey: .orientationStrategy) ?? .followAsset
+        }
     }
 
     struct Performance: Codable, Sendable {
@@ -302,13 +339,46 @@ struct RenderTemplate: Codable, Sendable {
         let height: Double
         let baselineOffset: Double
         let fontSize: Double
+        let placement: PlatePlacement
 
         nonisolated static let `default` = Plate(
             enabled: true,
             height: 96,
             baselineOffset: 18,
-            fontSize: 26
+            fontSize: 26,
+            placement: .frame
         )
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled
+            case height
+            case baselineOffset
+            case fontSize
+            case placement
+        }
+
+        nonisolated init(
+            enabled: Bool,
+            height: Double,
+            baselineOffset: Double,
+            fontSize: Double,
+            placement: PlatePlacement = .frame
+        ) {
+            self.enabled = enabled
+            self.height = height
+            self.baselineOffset = baselineOffset
+            self.fontSize = fontSize
+            self.placement = placement
+        }
+
+        nonisolated init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+            height = try container.decodeIfPresent(Double.self, forKey: .height) ?? 96
+            baselineOffset = try container.decodeIfPresent(Double.self, forKey: .baselineOffset) ?? 18
+            fontSize = try container.decodeIfPresent(Double.self, forKey: .fontSize) ?? 26
+            placement = try container.decodeIfPresent(PlatePlacement.self, forKey: .placement) ?? .frame
+        }
     }
 
     struct Canvas: Codable, Sendable {
