@@ -92,6 +92,7 @@ final class VideoExporter {
         let totalFrames = Int((timeline.totalDuration * TimeInterval(fps)).rounded(.up))
         let frameDuration = CMTime(value: 1, timescale: fps)
         let metricInterval = max(Int(fps), 1)
+        let progressInterval = max(Int(fps / 4), 1)
         let assetProvider = AssetProvider(
             urls: sourceURLs,
             targetMaxDimension: targetMaxDimension,
@@ -197,7 +198,9 @@ final class VideoExporter {
                 await logger.log("append failed at frame \(frameIndex): \(error.localizedDescription)")
                 throw VideoExporterError.writerFailed("frame \(frameIndex): \(error.localizedDescription)")
             }
-            progress(Double(frameIndex + 1) / Double(totalFrames))
+            if frameIndex.isMultiple(of: progressInterval) || frameIndex == totalFrames - 1 {
+                progress(Double(frameIndex + 1) / Double(totalFrames))
+            }
         }
 
         input.markAsFinished()

@@ -1079,6 +1079,78 @@ private struct ExportRequest {
     let settings: RenderSettings
 }
 
+private enum AssetThumbnailPipeline {
+    private static let cache: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 300
+        return cache
+    }()
+
+    static func cachedImage(for url: URL) -> NSImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    static func loadThumbnail(for url: URL, maxPixelSize: Int) -> NSImage? {
+        if let cached = cache.object(forKey: url as NSURL) {
+            return cached
+        }
+
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return nil
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCache: false,
+            kCGImageSourceThumbnailMaxPixelSize: max(64, maxPixelSize)
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+
+        let image = NSImage(cgImage: cgImage, size: .zero)
+        cache.setObject(image, forKey: url as NSURL)
+        return image
+    }
+}
+
+private struct AssetThumbnailView: View {
+    let url: URL
+    let height: CGFloat
+
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.secondary.opacity(0.1))
+            }
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .task(id: url) {
+            if let cached = AssetThumbnailPipeline.cachedImage(for: url) {
+                image = cached
+                return
+            }
+            let target = Int(height * 2.5)
+            let loaded = await Task.detached(priority: .utility) {
+                AssetThumbnailPipeline.loadThumbnail(for: url, maxPixelSize: target)
+            }.value
+            guard !Task.isCancelled else { return }
+            image = loaded
+        }
+    }
+}
+
 struct ContentView: View {
     private enum CenterPreviewTab: String, CaseIterable, Identifiable {
         case singleFrame
@@ -1452,18 +1524,7 @@ struct ContentView: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .topTrailing) {
-                if let image = NSImage(contentsOf: url) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 72)
-                        .frame(maxWidth: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.1))
-                        .frame(height: 72)
-                }
+                AssetThumbnailView(url: url, height: 72)
 
                 if !tags.isEmpty || viewModel.failedAssetNames.contains(fileName) {
                     Circle()
