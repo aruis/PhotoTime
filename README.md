@@ -25,7 +25,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 > 注：以上比例用于优先级取舍，不作为严格数学指标。
 
 ## 中期目标 v2（执行顺序 + 验收标准）
-对齐依据：`/Users/liurui/develop/workspace-xcode/PhotoTime/Docs/UI-Information-Architecture-v1.md`（流程与信息架构基线）。
+对齐依据：`Docs/UI-Information-Architecture-v1.md`（流程与信息架构基线）。
 
 ### 1) 导出前风险甄别闭环（Preflight）
 验收标准（可打勾）：
@@ -63,7 +63,8 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 - [x] 主操作/辅助操作分区清晰，按钮状态与状态机一致。
 - [x] 失败卡片提供明确“下一步动作”，成功卡片提供“继续动作”。
 - [x] 参数校验信息就地显示（inline），无需猜测错误原因。
-- [ ] 新用户在无文档条件下可完成首次导出。
+- [x] 新用户在无文档条件下可完成首次导出。
+  - 已调整：预览步骤标注为“可选”，引导文案明确“可直接导出 MP4”。
 
 ## 近期目标（vNext，1-2 周）
 1. 完成“横竖图策略可配置”
@@ -82,7 +83,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 4. 音频 v1 设计与技术预研
 - [x] 确认最小方案：单轨导入、预览可听、导出混流。
 - [x] 形成实现草案与风险清单（暂不进入复杂编辑）。
-  - 详见：`/Users/aruis/develop/workspace-xcode/PhotoTime/Docs/Audio-v1-Implementation-Plan.md`
+  - 详见：`Docs/Audio-v1-Implementation-Plan.md`
 
 ## 已确认产品取舍（当前版本）
 - 兼容性：最低兼容版本统一为 `macOS 14.6`。

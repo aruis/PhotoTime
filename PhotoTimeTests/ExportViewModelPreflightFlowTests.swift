@@ -24,6 +24,20 @@ struct ExportViewModelPreflightFlowTests {
     }
 
     @Test
+    func firstRunHintAllowsDirectExportWithoutPreview() async throws {
+        let viewModel = ExportViewModel()
+        viewModel.imageURLs = [URL(fileURLWithPath: "/tmp/demo.jpg")]
+
+        #expect(viewModel.hasOutputPath == true)
+        #expect(viewModel.hasPreviewFrame == false)
+        #expect(viewModel.nextActionHint.contains("直接导出 MP4") == true)
+
+        let previewStep = viewModel.flowSteps.first { $0.id == "preview" }
+        #expect(previewStep?.title.contains("可选") == true)
+        #expect(previewStep?.done == true)
+    }
+
+    @Test
     func startAudioPreviewFailsWhenAudioDisabled() async throws {
         let viewModel = ExportViewModel()
         viewModel.config.audioEnabled = false

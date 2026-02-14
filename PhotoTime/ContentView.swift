@@ -218,7 +218,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     var flowSteps: [FlowStep] {
         [
             FlowStep(id: "select-images", title: "选择图片", done: hasSelectedImages),
-            FlowStep(id: "preview", title: "生成预览", done: hasPreviewFrame),
+            FlowStep(id: "preview", title: "（可选）生成预览", done: hasPreviewFrame || hasSelectedImages),
             FlowStep(id: "select-output", title: "确认导出路径（可修改）", done: hasOutputPath),
             FlowStep(id: "export", title: "导出 MP4", done: hasSuccessCard)
         ]
@@ -246,13 +246,13 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     var nextActionHint: String {
         if !hasSelectedImages {
-            return "下一步：点击顶部“选择图片”导入素材。"
+            return "下一步：点击顶部“选择图片”或直接拖入素材。"
         }
         if validationMessage != nil {
             return "下一步：先修正参数校验错误，再继续。"
         }
         if !hasPreviewFrame {
-            return "下一步：点击“生成预览”，确认画面无误。"
+            return "可选：点击“生成预览”确认画面；也可直接导出 MP4。"
         }
         if !hasOutputPath {
             return "下一步：点击顶部“选择导出路径”设置输出文件。"
