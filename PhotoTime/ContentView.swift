@@ -1033,9 +1033,11 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 }
 
                 workflow.finishExportSuccess(
-                    message: settings.audioTrack == nil
-                        ? "导出完成: \(destination.lastPathComponent)\n日志: \(logURL.path)"
-                        : "导出完成: \(destination.lastPathComponent)\n音频: 已附加单轨背景音频\n日志: \(logURL.path)"
+                    message: ExportStatusMessageBuilder.success(
+                        outputFilename: destination.lastPathComponent,
+                        logPath: logURL.path,
+                        audioAttached: settings.audioTrack != nil
+                    )
                 )
                 lastSuccessfulOutputURL = destination
                 failedAssetNames = []
@@ -1281,19 +1283,13 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
             head = error.localizedDescription
         }
 
-        if failedAssetNames.isEmpty {
-            return "\(head)\n建议动作: \(advice.action.title)\n建议: \(advice.message)\n日志: \(logURL.path)"
-        }
-
-        let list = failedAssetNames.joined(separator: "、")
-        return """
-        \(head)
-        问题素材: \(list)
-        处理建议: 在素材列表中定位该文件，替换或移除后重试导出
-        建议动作: \(advice.action.title)
-        详细建议: \(advice.message)
-        日志: \(logURL.path)
-        """
+        return ExportStatusMessageBuilder.failure(
+            head: head,
+            logPath: logURL.path,
+            adviceActionTitle: advice.action.title,
+            adviceMessage: advice.message,
+            failedAssetNames: failedAssetNames
+        )
     }
 }
 
