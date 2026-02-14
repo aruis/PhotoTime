@@ -92,3 +92,10 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 - 暂不做：面向用户的稳定性指标看板与长期跟踪（前提是导出前风险甄别充分）。
 - 错误处理：重点是“不崩溃 + 友好提示 + 尽可能定位到问题图片”。
 - 日志定位：日志保留给开发排查使用，但不作为用户主路径能力。
+
+## 本地测试（当前策略）
+- 近期默认仅跑非 UI 测试（`PhotoTimeTests`），跳过 `PhotoTimeUITests`。
+- 一键命令：
+  - `./scripts/test-non-ui.sh`
+- 等价 `xcodebuild` 命令（带 ad-hoc 签名，避免本机调试库签名导致的测试启动失败）：
+  - `xcodebuild test -project PhotoTime.xcodeproj -scheme PhotoTime -destination 'platform=macOS' -derivedDataPath .derivedData CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-' -only-testing:PhotoTimeTests`
