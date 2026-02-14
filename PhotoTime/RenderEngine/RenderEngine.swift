@@ -72,6 +72,18 @@ final class RenderEngine {
         await logger.log("input count: \(imageURLs.count)")
         await logger.log("input summary: \(Self.makeInputSummary(urls: imageURLs))")
         await logger.log("output: \(outputURL.path)")
+        if let audioTrack = settings.audioTrack {
+            await logger.log(
+                String(
+                    format: "audio track: enabled path=%@ volume=%.2f loop=%@",
+                    audioTrack.sourceURL.path,
+                    audioTrack.volume,
+                    audioTrack.loopEnabled ? "on" : "off"
+                )
+            )
+        } else {
+            await logger.log("audio track: disabled")
+        }
         await logger.log(
             String(
                 format: "settings output=%dx%d fps=%d imageDuration=%.2fs transition=%.2fs(%@) kenBurns=%@ prefetchRadius=%d prefetchMaxConcurrent=%d",
@@ -114,7 +126,25 @@ final class RenderEngine {
         )
         await logger.log("timeline total duration: \(timeline.totalDuration)s")
 
+        if let audioTrack = settings.audioTrack {
+            if let message = AudioTrackValidation.validate(url: audioTrack.sourceURL) {
+                await logger.log("audio validation failed: \(message)")
+                throw RenderEngineError.exportFailed("音频不可用: \(message)")
+            }
+        }
+
         let composer = FrameComposer(settings: settings)
+        let requiresAudioMux = settings.audioTrack != nil
+        let intermediateVideoOutputURL: URL
+        if requiresAudioMux {
+            intermediateVideoOutputURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("PhotoTime-Video-\(UUID().uuidString).mp4")
+            if FileManager.default.fileExists(atPath: intermediateVideoOutputURL.path) {
+                try? FileManager.default.removeItem(at: intermediateVideoOutputURL)
+            }
+        } else {
+            intermediateVideoOutputURL = outputURL
+        }
 
         do {
             let exporter = VideoExporter(settings: settings)
@@ -123,10 +153,24 @@ final class RenderEngine {
                 targetMaxDimension: targetMaxDimension,
                 timeline: timeline,
                 composer: composer,
-                to: outputURL,
+                to: intermediateVideoOutputURL,
                 logger: logger,
                 progress: progress
             )
+
+            if let audioTrack = settings.audioTrack {
+                await logger.log("audio mux start")
+                try await AudioMuxer.muxSingleTrack(
+                    videoURL: intermediateVideoOutputURL,
+                    audioURL: audioTrack.sourceURL,
+                    outputURL: outputURL,
+                    volume: Float(audioTrack.volume),
+                    loopEnabled: audioTrack.loopEnabled
+                )
+                await logger.log("audio mux completed")
+                try? FileManager.default.removeItem(at: intermediateVideoOutputURL)
+            }
+
             await logger.log("export completed")
         } catch is CancellationError {
             await logger.log("export cancelled")

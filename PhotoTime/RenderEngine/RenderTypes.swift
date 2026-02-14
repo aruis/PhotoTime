@@ -61,6 +61,18 @@ struct CanvasSettings: Codable, Sendable {
     )
 }
 
+struct AudioTrackSettings: Sendable {
+    let sourceURL: URL
+    let volume: Double
+    let loopEnabled: Bool
+
+    nonisolated init(sourceURL: URL, volume: Double = 1, loopEnabled: Bool = false) {
+        self.sourceURL = sourceURL
+        self.volume = max(0, min(volume, 1))
+        self.loopEnabled = loopEnabled
+    }
+}
+
 struct RenderSettings {
     let outputSize: CGSize
     let fps: Int32
@@ -75,6 +87,7 @@ struct RenderSettings {
     let layout: LayoutSettings
     let plate: PlateSettings
     let canvas: CanvasSettings
+    let audioTrack: AudioTrackSettings?
 
     nonisolated init(
         outputSize: CGSize,
@@ -89,7 +102,8 @@ struct RenderSettings {
         prefetchMaxConcurrent: Int = 2,
         layout: LayoutSettings = .default,
         plate: PlateSettings = .default,
-        canvas: CanvasSettings = .default
+        canvas: CanvasSettings = .default,
+        audioTrack: AudioTrackSettings? = nil
     ) {
         self.outputSize = outputSize
         self.fps = fps
@@ -104,6 +118,7 @@ struct RenderSettings {
         self.layout = layout
         self.plate = plate
         self.canvas = canvas
+        self.audioTrack = audioTrack
     }
 
     nonisolated static let mvp = RenderSettings(
@@ -152,7 +167,12 @@ struct RenderSettings {
                 paperWhite: template.canvas.paperWhite,
                 strokeGray: template.canvas.strokeGray,
                 textGray: template.canvas.textGray
-            )
+            ),
+            audioTrack: template.audio.enabled ? .init(
+                sourceURL: URL(fileURLWithPath: template.audio.filePath),
+                volume: template.audio.volume,
+                loopEnabled: template.audio.loopEnabled
+            ) : nil
         )
     }
 
@@ -191,6 +211,12 @@ struct RenderSettings {
                 paperWhite: canvas.paperWhite,
                 strokeGray: canvas.strokeGray,
                 textGray: canvas.textGray
+            ),
+            audio: .init(
+                enabled: audioTrack != nil,
+                filePath: audioTrack?.sourceURL.path ?? "",
+                volume: audioTrack?.volume ?? 1,
+                loopEnabled: audioTrack?.loopEnabled ?? false
             )
         )
     }
@@ -201,7 +227,7 @@ struct RenderSettings {
 }
 
 struct RenderTemplate: Codable, Sendable {
-    nonisolated static let currentSchemaVersion = 2
+    nonisolated static let currentSchemaVersion = 3
 
     let schemaVersion: Int
     let output: Output
@@ -212,6 +238,7 @@ struct RenderTemplate: Codable, Sendable {
     let layout: Layout
     let plate: Plate
     let canvas: Canvas
+    let audio: Audio
 
     nonisolated init(
         schemaVersion: Int = RenderTemplate.currentSchemaVersion,
@@ -222,7 +249,8 @@ struct RenderTemplate: Codable, Sendable {
         performance: Performance,
         layout: Layout,
         plate: Plate,
-        canvas: Canvas
+        canvas: Canvas,
+        audio: Audio = .default
     ) {
         self.schemaVersion = schemaVersion
         self.output = output
@@ -233,6 +261,7 @@ struct RenderTemplate: Codable, Sendable {
         self.layout = layout
         self.plate = plate
         self.canvas = canvas
+        self.audio = audio
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -245,6 +274,7 @@ struct RenderTemplate: Codable, Sendable {
         case layout
         case plate
         case canvas
+        case audio
     }
 
     init(from decoder: Decoder) throws {
@@ -258,6 +288,7 @@ struct RenderTemplate: Codable, Sendable {
         layout = try container.decodeIfPresent(Layout.self, forKey: .layout) ?? .default
         plate = try container.decodeIfPresent(Plate.self, forKey: .plate) ?? .default
         canvas = try container.decodeIfPresent(Canvas.self, forKey: .canvas) ?? .default
+        audio = try container.decodeIfPresent(Audio.self, forKey: .audio) ?? .default
     }
 
     struct Output: Codable, Sendable {
@@ -393,6 +424,38 @@ struct RenderTemplate: Codable, Sendable {
             strokeGray: 0.82,
             textGray: 0.15
         )
+    }
+
+    struct Audio: Codable, Sendable {
+        let enabled: Bool
+        let filePath: String
+        let volume: Double
+        let loopEnabled: Bool
+
+        nonisolated static let `default` = Audio(enabled: false, filePath: "", volume: 1, loopEnabled: false)
+
+        private enum CodingKeys: String, CodingKey {
+            case enabled
+            case filePath
+            case volume
+            case loopEnabled
+        }
+
+        nonisolated init(enabled: Bool, filePath: String, volume: Double = 1, loopEnabled: Bool = false) {
+            self.enabled = enabled && !filePath.isEmpty
+            self.filePath = filePath
+            self.volume = max(0, min(volume, 1))
+            self.loopEnabled = loopEnabled
+        }
+
+        nonisolated init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+            let filePath = try container.decodeIfPresent(String.self, forKey: .filePath) ?? ""
+            let volume = try container.decodeIfPresent(Double.self, forKey: .volume) ?? 1
+            let loopEnabled = try container.decodeIfPresent(Bool.self, forKey: .loopEnabled) ?? false
+            self.init(enabled: enabled, filePath: filePath, volume: volume, loopEnabled: loopEnabled)
+        }
     }
 }
 

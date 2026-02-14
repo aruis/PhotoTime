@@ -39,7 +39,7 @@ enum ExportRecoveryAdvisor {
             keywords.contains { lowercasedDescription.contains($0) }
         }
 
-        if containsAny(["operation not permitted", "permission denied", "sandbox", "not authorized"]) {
+        if containsAny(["operation not permitted", "permission denied", "sandbox", "not authorized", "don't have permission"]) {
             return RecoveryAdvice(
                 action: .reauthorizeAccess,
                 message: "请确认已授予 PhotoTime 访问素材和导出目录权限，然后重试导出。"

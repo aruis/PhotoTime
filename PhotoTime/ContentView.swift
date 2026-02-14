@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Combine
 import SwiftUI
 import UniformTypeIdentifiers
@@ -23,7 +24,7 @@ private extension PreflightIssue {
 }
 
 @MainActor
-final class ExportViewModel: ObservableObject {
+final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     enum FileListFilter: String, CaseIterable, Identifiable {
         case all
         case problematic
@@ -84,6 +85,8 @@ final class ExportViewModel: ObservableObject {
     @Published var fileListFilter: FileListFilter = .all
     @Published var preflightIssueFilter: PreflightIssueFilter = .all
     @Published var config = RenderEditorConfig()
+    @Published var audioStatusMessage: String?
+    @Published var isAudioPreviewPlaying = false
     @Published var recoveryAdvice: RecoveryAdvice?
     @Published private var workflow = ExportWorkflowModel()
 
@@ -97,11 +100,17 @@ final class ExportViewModel: ObservableObject {
     private var lastSuccessfulOutputURL: URL?
     private var autoPreviewRefreshEnabled = true
     private var timelinePreviewEnabled = true
+    private var previewAudioPlayer: AVAudioPlayer?
 
     init(makeEngine: @escaping (RenderSettings) -> any RenderingEngineClient = { settings in
         RenderEngine(settings: settings)
     }) {
         self.makeEngine = makeEngine
+        super.init()
+        outputURL = Self.defaultOutputURL()
+        if let outputURL {
+            workflow.setIdleMessage("默认导出路径已设置：\(outputURL.lastPathComponent)（可修改）")
+        }
         applyUITestScenarioIfNeeded()
     }
 
@@ -210,28 +219,48 @@ final class ExportViewModel: ObservableObject {
         [
             FlowStep(id: "select-images", title: "选择图片", done: hasSelectedImages),
             FlowStep(id: "preview", title: "生成预览", done: hasPreviewFrame),
-            FlowStep(id: "select-output", title: "选择导出路径", done: hasOutputPath),
+            FlowStep(id: "select-output", title: "确认导出路径（可修改）", done: hasOutputPath),
             FlowStep(id: "export", title: "导出 MP4", done: hasSuccessCard)
         ]
     }
 
+    var selectedAudioFilename: String? {
+        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    var selectedAudioDuration: TimeInterval? {
+        guard config.audioEnabled else { return nil }
+        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: path)
+        let duration = AVURLAsset(url: url).duration.seconds
+        guard duration.isFinite, duration > 0 else { return nil }
+        return duration
+    }
+
+    var canPreviewAudio: Bool {
+        config.audioEnabled && selectedAudioFilename != nil && !isBusy
+    }
+
     var nextActionHint: String {
         if !hasSelectedImages {
-            return "下一步：先选择图片。"
+            return "下一步：点击顶部“选择图片”导入素材。"
         }
         if validationMessage != nil {
-            return "下一步：先修正导出参数中的校验错误。"
+            return "下一步：先修正参数校验错误，再继续。"
         }
         if !hasPreviewFrame {
-            return "下一步：生成预览，确认画面无误。"
+            return "下一步：点击“生成预览”，确认画面无误。"
         }
         if !hasOutputPath {
-            return "下一步：选择导出路径。"
+            return "下一步：点击顶部“选择导出路径”设置输出文件。"
         }
         if isExporting {
             return "正在导出，请等待完成。"
         }
-        return "已就绪：可以导出 MP4。"
+        return "已就绪：点击顶部“导出 MP4”即可完成首次导出。"
     }
 
     var orderedImageURLsForDisplay: [URL] {
@@ -322,8 +351,157 @@ final class ExportViewModel: ObservableObject {
             config.enableCrossfade ? "1" : "0",
             config.enableKenBurns ? "1" : "0",
             "\(config.prefetchRadius)",
-            "\(config.prefetchMaxConcurrent)"
+            "\(config.prefetchMaxConcurrent)",
+            config.audioEnabled ? "1" : "0",
+            config.audioFilePath,
+            String(format: "%.3f", config.audioVolume),
+            config.audioLoopEnabled ? "1" : "0"
         ].joined(separator: "|")
+    }
+
+    func chooseAudioTrack() {
+        guard !isBusy else { return }
+
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        applyAudioTrack(url: url, sourceDescription: "已选择音频")
+    }
+
+    @discardableResult
+    func importDroppedAudioTrack(_ urls: [URL]) -> Bool {
+        guard !isBusy else { return false }
+
+        for url in urls {
+            if AudioTrackValidation.validate(url: url) == nil {
+                applyAudioTrack(url: url, sourceDescription: "已拖入音频")
+                return true
+            }
+        }
+
+        let message = urls.first.flatMap { AudioTrackValidation.validate(url: $0) } ?? "未检测到可用音频文件"
+        audioStatusMessage = message
+        config.audioEnabled = false
+        config.audioFilePath = ""
+        workflow.setIdleMessage("音频导入失败: \(message)")
+        return false
+    }
+
+    func clearAudioTrack() {
+        guard !isBusy else { return }
+        stopAudioPreview()
+        let previous = selectedAudioFilename
+        config.audioEnabled = false
+        config.audioFilePath = ""
+        config.audioVolume = 1
+        audioStatusMessage = nil
+        if let previous {
+            workflow.setIdleMessage("已清除音频: \(previous)")
+        } else {
+            workflow.setIdleMessage("已清除音频")
+        }
+    }
+
+    private func applyAudioTrack(url: URL, sourceDescription: String) {
+        stopAudioPreview()
+        if let message = AudioTrackValidation.validate(url: url) {
+            audioStatusMessage = message
+            config.audioEnabled = false
+            config.audioFilePath = ""
+            workflow.setIdleMessage("音频导入失败: \(message)")
+            return
+        }
+
+        config.audioEnabled = true
+        config.audioFilePath = url.path
+        if config.audioVolume <= 0 {
+            config.audioVolume = 1
+        }
+        audioStatusMessage = "音频已就绪：\(url.lastPathComponent)。导出时将附加单轨背景音频。"
+        workflow.setIdleMessage("\(sourceDescription): \(url.lastPathComponent)")
+    }
+
+    @discardableResult
+    func startAudioPreview() -> Bool {
+        guard config.audioEnabled else {
+            audioStatusMessage = "请先启用背景音频。"
+            return false
+        }
+
+        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else {
+            audioStatusMessage = "请先选择音频文件。"
+            return false
+        }
+
+        let url = URL(fileURLWithPath: path)
+        if let message = AudioTrackValidation.validate(url: url) {
+            audioStatusMessage = message
+            return false
+        }
+
+        do {
+            stopAudioPreview()
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.delegate = self
+            player.volume = Float(config.audioVolume)
+            player.numberOfLoops = config.audioLoopEnabled ? -1 : 0
+            player.prepareToPlay()
+            let maxStart = max(0, player.duration - 0.01)
+            player.currentTime = min(max(0, previewSecond), maxStart)
+            guard player.play() else {
+                audioStatusMessage = "音频预览播放失败。"
+                return false
+            }
+            previewAudioPlayer = player
+            isAudioPreviewPlaying = true
+            workflow.setIdleMessage("音频预览播放中")
+            return true
+        } catch {
+            audioStatusMessage = "音频预览失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func toggleAudioPreview() {
+        if isAudioPreviewPlaying {
+            pauseAudioPreview()
+        } else {
+            _ = startAudioPreview()
+        }
+    }
+
+    func pauseAudioPreview() {
+        guard let player = previewAudioPlayer else { return }
+        player.pause()
+        previewSecond = player.currentTime
+        isAudioPreviewPlaying = false
+        workflow.setIdleMessage("音频预览已暂停")
+    }
+
+    func stopAudioPreview() {
+        guard let player = previewAudioPlayer else {
+            isAudioPreviewPlaying = false
+            return
+        }
+        player.stop()
+        previewAudioPlayer = nil
+        isAudioPreviewPlaying = false
+    }
+
+    func syncAudioPreviewPosition() {
+        guard let player = previewAudioPlayer, isAudioPreviewPlaying else { return }
+        let maxStart = max(0, player.duration - 0.01)
+        player.currentTime = min(max(0, previewSecond), maxStart)
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        guard player === previewAudioPlayer else { return }
+        previewAudioPlayer = nil
+        isAudioPreviewPlaying = false
     }
 
     func chooseImages() {
@@ -437,6 +615,17 @@ final class ExportViewModel: ObservableObject {
         workflow.setIdleMessage("导出路径: \(url.path)")
     }
 
+    private static func defaultOutputURL() -> URL? {
+        let fileName = "PhotoTime-Output.mp4"
+        if let movies = FileManager.default.urls(for: .moviesDirectory, in: .userDomainMask).first {
+            return movies.appendingPathComponent(fileName)
+        }
+        if let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            return documents.appendingPathComponent(fileName)
+        }
+        return nil
+    }
+
     func importTemplate() {
         guard !isBusy else { return }
 
@@ -503,14 +692,38 @@ final class ExportViewModel: ObservableObject {
             workflow.setIdleMessage(invalidSettingsMessage ?? "参数无效")
             return
         }
+        if config.audioEnabled {
+            let audioURL = URL(fileURLWithPath: config.audioFilePath)
+            if let message = AudioTrackValidation.validate(url: audioURL) {
+                audioStatusMessage = message
+                workflow.setIdleMessage("音频校验失败: \(message)")
+                return
+            }
+        }
 
         let request = ExportRequest(
             imageURLs: imageURLs,
             outputURL: outputURL,
             settings: config.renderSettings
         )
-        pendingRequestFromPreflight = nil
+        let report = ExportPreflightScanner.scan(imageURLs: request.imageURLs)
+        preflightReport = report
+        ignoredPreflightIssueKeys = []
         skippedAssetNamesFromPreflight = []
+        preflightIssueFilter = report.hasBlockingIssues ? .mustFix : .all
+        pendingRequestFromPreflight = request
+
+        if report.hasBlockingIssues {
+            fileListFilter = .problematic
+            workflow.setIdleMessage("导出前检查发现 \(report.blockingIssues.count) 个必须修复问题，请先处理或跳过问题素材。")
+            return
+        }
+
+        if !report.reviewIssues.isEmpty {
+            workflow.setIdleMessage("导出前检查完成：\(report.reviewIssues.count) 个建议关注问题，将继续导出。")
+        }
+
+        pendingRequestFromPreflight = nil
         startExport(request: request, fromRetry: false)
     }
 
@@ -733,6 +946,12 @@ final class ExportViewModel: ObservableObject {
     func handleConfigChanged() {
         config.clampToSafeRange()
         previewSecond = min(previewSecond, previewMaxSecond)
+        previewAudioPlayer?.volume = Float(config.audioVolume)
+        previewAudioPlayer?.numberOfLoops = config.audioLoopEnabled ? -1 : 0
+        if !config.audioEnabled {
+            audioStatusMessage = nil
+            stopAudioPreview()
+        }
         guard autoPreviewRefreshEnabled else { return }
         previewStatusMessage = "参数已变更，预览将自动刷新"
         schedulePreviewRegeneration()
@@ -744,6 +963,9 @@ final class ExportViewModel: ObservableObject {
 
     func setTimelinePreviewEnabled(_ enabled: Bool) {
         timelinePreviewEnabled = enabled
+        if !enabled {
+            stopAudioPreview()
+        }
     }
 
     private func interactivePreviewSettings(from settings: RenderSettings) -> RenderSettings {
@@ -811,7 +1033,9 @@ final class ExportViewModel: ObservableObject {
                 }
 
                 workflow.finishExportSuccess(
-                    message: "导出完成: \(destination.lastPathComponent)\n日志: \(logURL.path)"
+                    message: settings.audioTrack == nil
+                        ? "导出完成: \(destination.lastPathComponent)\n日志: \(logURL.path)"
+                        : "导出完成: \(destination.lastPathComponent)\n音频: 已附加单轨背景音频\n日志: \(logURL.path)"
                 )
                 lastSuccessfulOutputURL = destination
                 failedAssetNames = []
@@ -1277,6 +1501,7 @@ struct ContentView: View {
     @State private var singlePreviewDebounceTask: Task<Void, Never>?
     @State private var assetSearchText = ""
     @State private var isAssetDropTarget = false
+    @State private var isAudioDropTarget = false
     @State private var draggingAssetURL: URL?
     @State private var expandedPreflightIssueKeys: Set<String> = []
     @State private var ignoredIssuesExpanded = false
@@ -1303,12 +1528,16 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button("选择图片") { viewModel.chooseImages() }
+                    .accessibilityIdentifier("primary_select_images")
                     .disabled(!viewModel.actionAvailability.canSelectImages)
                 Button("选择导出路径") { viewModel.chooseOutput() }
+                    .accessibilityIdentifier("primary_select_output")
                     .disabled(!viewModel.actionAvailability.canSelectOutput)
                 Button("导出 MP4") { viewModel.export() }
+                    .accessibilityIdentifier("primary_export")
                     .disabled(!viewModel.canRunExport)
                 Button("取消导出") { viewModel.cancelExport() }
+                    .accessibilityIdentifier("primary_cancel")
                     .disabled(!viewModel.actionAvailability.canCancelExport)
             }
 
@@ -1321,12 +1550,16 @@ struct ContentView: View {
                             viewModel.generatePreview()
                         }
                     }
+                        .accessibilityIdentifier("secondary_preview")
                         .disabled(!viewModel.canRunPreview)
                     Button("导入模板") { viewModel.importTemplate() }
+                        .accessibilityIdentifier("secondary_import_template")
                         .disabled(!viewModel.actionAvailability.canImportTemplate)
                     Button("保存模板") { viewModel.exportTemplate() }
+                        .accessibilityIdentifier("secondary_export_template")
                         .disabled(!viewModel.actionAvailability.canSaveTemplate)
                     Button("重试上次导出") { viewModel.retryLastExport() }
+                        .accessibilityIdentifier("secondary_retry_export")
                         .disabled(!viewModel.actionAvailability.canRetryExport)
                 }
             }
@@ -1372,6 +1605,9 @@ struct ContentView: View {
             } else {
                 viewModel.generatePreview()
             }
+        }
+        .onDisappear {
+            viewModel.stopAudioPreview()
         }
     }
 
@@ -1471,7 +1707,7 @@ struct ContentView: View {
                 viewModel.addImages()
             }
             .buttonStyle(.borderedProminent)
-            Text("支持拖入图片或文件夹")
+            Text("支持拖入图片或文件夹；导出路径默认在“影片”目录，可按需修改。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -1805,10 +2041,48 @@ struct ContentView: View {
                 }
             }
         }
+        .textSelection(.enabled)
     }
 
     private var exportStatusPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
+            GroupBox("流程状态") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(viewModel.statusMessage)
+                        .font(.callout)
+                        .accessibilityIdentifier("workflow_status_message")
+                    Text(viewModel.nextActionHint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("flow_next_hint")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("快速开始") {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(viewModel.flowSteps) { step in
+                        HStack(spacing: 8) {
+                            Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(step.done ? .green : .secondary)
+                            Text(step.title)
+                                .font(.caption)
+                                .foregroundStyle(step.done ? .secondary : .primary)
+                        }
+                    }
+
+                    if let action = firstRunPrimaryAction {
+                        Button(action.title) {
+                            action.handler()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(viewModel.isBusy)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             if viewModel.isExporting {
                 ProgressView(value: viewModel.progress)
                     .frame(maxWidth: .infinity)
@@ -1879,6 +2153,31 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private var firstRunPrimaryAction: (title: String, handler: () -> Void)? {
+        if !viewModel.hasSelectedImages {
+            return ("现在选择图片", { viewModel.chooseImages() })
+        }
+        if viewModel.validationMessage != nil {
+            return nil
+        }
+        if !viewModel.hasPreviewFrame {
+            return ("现在生成预览", {
+                if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
+                    viewModel.generatePreviewForSelectedAsset(selected)
+                } else {
+                    viewModel.generatePreview()
+                }
+            })
+        }
+        if !viewModel.hasOutputPath {
+            return ("现在选择导出路径", { viewModel.chooseOutput() })
+        }
+        if !viewModel.hasSuccessCard {
+            return ("现在导出 MP4", { viewModel.export() })
+        }
+        return nil
     }
 
     private func preflightIssueExpandedBinding(for key: String) -> Binding<Bool> {
@@ -2012,8 +2311,68 @@ struct ContentView: View {
                     )
                     .onChange(of: viewModel.previewSecond) { _, _ in
                         viewModel.schedulePreviewRegeneration()
+                        viewModel.syncAudioPreviewPosition()
                     }
                     .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                }
+
+                if viewModel.config.audioEnabled {
+                    VStack(alignment: .leading, spacing: 6) {
+                        let videoDuration = max(viewModel.previewMaxSecond, 0)
+                        let audioDuration = viewModel.selectedAudioDuration
+                        let segments = audioTimelineSegments(
+                            videoDuration: videoDuration,
+                            audioDuration: audioDuration,
+                            loopEnabled: viewModel.config.audioLoopEnabled
+                        )
+                        let audioName = viewModel.selectedAudioFilename ?? "未选择音频"
+
+                        Text("音轨: \(audioName)")
+                            .font(.caption)
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(Color.secondary.opacity(0.12))
+                            GeometryReader { proxy in
+                                let width = proxy.size.width
+                                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                                    let start = segment.start
+                                    let end = segment.end
+                                    let x = videoDuration > 0 ? CGFloat(start / videoDuration) * width : 0
+                                    let segmentWidth = videoDuration > 0 ? max(2, CGFloat((end - start) / videoDuration) * width) : 0
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(Color.accentColor.opacity(0.75))
+                                        .frame(width: segmentWidth, height: 10)
+                                        .offset(x: x, y: 4)
+                                }
+                            }
+                        }
+                        .frame(height: 18)
+
+                        if let audioDuration {
+                            Text(
+                                "视频 \(videoDuration, specifier: "%.2f")s · 音频 \(audioDuration, specifier: "%.2f")s · \(viewModel.config.audioLoopEnabled ? "自动循环开启" : "自动循环关闭")"
+                            )
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        } else {
+                            Text("未读取到音频时长，导出前会再次校验。")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        HStack(spacing: 8) {
+                            Button(viewModel.isAudioPreviewPlaying ? "暂停试听" : "试听当前时间点") {
+                                viewModel.toggleAudioPreview()
+                            }
+                            .disabled(!viewModel.canPreviewAudio)
+
+                            Button("停止") {
+                                viewModel.stopAudioPreview()
+                            }
+                            .disabled(!viewModel.isAudioPreviewPlaying)
+                        }
+                        .controlSize(.small)
+                    }
                 }
 
                 if let preview = viewModel.previewImage {
@@ -2130,6 +2489,8 @@ struct ContentView: View {
                 }
                 .disabled(viewModel.isBusy)
             }
+
+            audioSettingsSection
         }
         .formStyle(.grouped)
     }
@@ -2228,8 +2589,130 @@ struct ContentView: View {
                 Stepper("预取并发: \(viewModel.config.prefetchMaxConcurrent)", value: $viewModel.config.prefetchMaxConcurrent, in: RenderEditorConfig.prefetchMaxConcurrentRange)
                     .disabled(viewModel.isBusy)
             }
+
+            audioSettingsSection
         }
         .formStyle(.grouped)
+    }
+
+    private var audioSettingsSection: some View {
+        Section("音频 v1（预研）") {
+            Toggle("启用背景音频", isOn: $viewModel.config.audioEnabled)
+                .disabled(viewModel.isBusy)
+
+            if viewModel.config.audioEnabled {
+                HStack(spacing: 10) {
+                    Button("选择音频") {
+                        viewModel.chooseAudioTrack()
+                    }
+                    .disabled(viewModel.isBusy)
+
+                    Button("清除音频") {
+                        viewModel.clearAudioTrack()
+                    }
+                    .disabled(viewModel.isBusy || viewModel.selectedAudioFilename == nil)
+                }
+
+                if let name = viewModel.selectedAudioFilename {
+                    Text("已选: \(name)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("尚未选择音频文件")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("音量: \(Int((viewModel.config.audioVolume * 100).rounded()))%")
+                    Slider(value: $viewModel.config.audioVolume, in: RenderEditorConfig.audioVolumeRange, step: 0.01)
+                        .disabled(viewModel.isBusy)
+                }
+
+                Toggle("自动循环至视频结束", isOn: $viewModel.config.audioLoopEnabled)
+                    .disabled(viewModel.isBusy)
+
+                if let message = viewModel.audioStatusMessage {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("将以单轨方式附加背景音频，不支持剪辑/淡入淡出编辑。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: 6) {
+                    Label("拖拽音频到此处", systemImage: "waveform")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("支持单条音频文件；将自动校验格式。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isAudioDropTarget ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(
+                            isAudioDropTarget ? Color.accentColor : Color.secondary.opacity(0.25),
+                            style: StrokeStyle(lineWidth: 1, dash: [4, 4])
+                        )
+                )
+                .onDrop(of: [UTType.fileURL], isTargeted: $isAudioDropTarget, perform: handleAudioDrop(providers:))
+            }
+        }
+    }
+
+    private func handleAudioDrop(providers: [NSItemProvider]) -> Bool {
+        let fileProviders = providers.filter { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }
+        guard !fileProviders.isEmpty else { return false }
+
+        let lock = NSLock()
+        let group = DispatchGroup()
+        var dropped: [URL] = []
+
+        for provider in fileProviders {
+            group.enter()
+            provider.loadObject(ofClass: NSURL.self) { item, _ in
+                defer { group.leave() }
+                guard let item = item as? URL else { return }
+                lock.lock()
+                dropped.append(item)
+                lock.unlock()
+            }
+        }
+
+        group.notify(queue: .main) {
+            _ = viewModel.importDroppedAudioTrack(dropped)
+        }
+
+        return true
+    }
+
+    private func audioTimelineSegments(
+        videoDuration: Double,
+        audioDuration: Double?,
+        loopEnabled: Bool
+    ) -> [(start: Double, end: Double)] {
+        guard videoDuration > 0, let audioDuration, audioDuration > 0 else { return [] }
+        if !loopEnabled {
+            return [(0, min(videoDuration, audioDuration))]
+        }
+
+        var segments: [(start: Double, end: Double)] = []
+        var cursor: Double = 0
+        while cursor < videoDuration {
+            let end = min(videoDuration, cursor + audioDuration)
+            segments.append((cursor, end))
+            if end <= cursor { break }
+            cursor = end
+        }
+        return segments
     }
 
     private var fpsPicker: some View {

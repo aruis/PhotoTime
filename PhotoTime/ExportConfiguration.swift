@@ -85,6 +85,10 @@ struct RenderEditorConfig: Sendable {
     var platePlacement: PlatePlacement = PlateSettings.default.placement
     var prefetchRadius: Int = 1
     var prefetchMaxConcurrent: Int = 2
+    var audioEnabled: Bool = false
+    var audioFilePath: String = ""
+    var audioVolume: Double = 1
+    var audioLoopEnabled: Bool = false
 
     static let outputWidthRange = 640...3840
     static let outputHeightRange = 360...2160
@@ -101,6 +105,7 @@ struct RenderEditorConfig: Sendable {
     static let plateFontSizeRange = 12.0...42.0
     static let prefetchRadiusRange = 0...4
     static let prefetchMaxConcurrentRange = 1...8
+    static let audioVolumeRange = 0.0...1.0
 
     init() {}
 
@@ -134,6 +139,10 @@ struct RenderEditorConfig: Sendable {
         platePlacement = settings.plate.placement
         prefetchRadius = settings.prefetchRadius
         prefetchMaxConcurrent = settings.prefetchMaxConcurrent
+        audioEnabled = settings.audioTrack != nil
+        audioFilePath = settings.audioTrack?.sourceURL.path ?? ""
+        audioVolume = settings.audioTrack?.volume ?? 1
+        audioLoopEnabled = settings.audioTrack?.loopEnabled ?? false
         clampToSafeRange()
     }
 
@@ -159,6 +168,11 @@ struct RenderEditorConfig: Sendable {
         plateFontSize = min(max(plateFontSize, Self.plateFontSizeRange.lowerBound), Self.plateFontSizeRange.upperBound)
         prefetchRadius = min(max(prefetchRadius, Self.prefetchRadiusRange.lowerBound), Self.prefetchRadiusRange.upperBound)
         prefetchMaxConcurrent = min(max(prefetchMaxConcurrent, Self.prefetchMaxConcurrentRange.lowerBound), Self.prefetchMaxConcurrentRange.upperBound)
+        audioVolume = min(max(audioVolume, Self.audioVolumeRange.lowerBound), Self.audioVolumeRange.upperBound)
+        if !audioEnabled {
+            audioFilePath = ""
+            audioLoopEnabled = false
+        }
     }
 
     var invalidMessage: String? {
@@ -173,6 +187,9 @@ struct RenderEditorConfig: Sendable {
         }
         if enableCrossfade && (transitionDuration < 0 || transitionDuration >= imageDuration) {
             return "转场时长必须满足 0 <= 转场 < 单图时长"
+        }
+        if audioEnabled && audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "已启用音频，请先选择音频文件"
         }
         return nil
     }
@@ -201,7 +218,8 @@ struct RenderEditorConfig: Sendable {
                 fontSize: plateFontSize,
                 placement: platePlacement
             ),
-            canvas: resolvedCanvasSettings
+            canvas: resolvedCanvasSettings,
+            audioTrack: resolvedAudioTrack
         )
     }
 
@@ -219,5 +237,16 @@ struct RenderEditorConfig: Sendable {
             )
         }
         return frameStylePreset.canvas
+    }
+
+    private var resolvedAudioTrack: AudioTrackSettings? {
+        guard audioEnabled else { return nil }
+        let path = audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return nil }
+        return AudioTrackSettings(
+            sourceURL: URL(fileURLWithPath: path),
+            volume: audioVolume,
+            loopEnabled: audioLoopEnabled
+        )
     }
 }

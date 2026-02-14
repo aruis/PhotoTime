@@ -20,7 +20,12 @@ struct RenderTemplateTests {
             prefetchMaxConcurrent: 3,
             layout: LayoutSettings(horizontalMargin: 160, topMargin: 60, bottomMargin: 84, innerPadding: 20),
             plate: PlateSettings(enabled: true, height: 88, baselineOffset: 16, fontSize: 24, placement: .frame),
-            canvas: CanvasSettings(backgroundGray: 0.12, paperWhite: 0.97, strokeGray: 0.8, textGray: 0.2)
+            canvas: CanvasSettings(backgroundGray: 0.12, paperWhite: 0.97, strokeGray: 0.8, textGray: 0.2),
+            audioTrack: AudioTrackSettings(
+                sourceURL: URL(fileURLWithPath: "/tmp/roundtrip-audio.m4a"),
+                volume: 0.8,
+                loopEnabled: true
+            )
         )
 
         let template = settings.template
@@ -54,6 +59,9 @@ struct RenderTemplateTests {
         #expect(rebuilt.canvas.paperWhite == 0.97)
         #expect(rebuilt.canvas.strokeGray == 0.8)
         #expect(rebuilt.canvas.textGray == 0.2)
+        #expect(rebuilt.audioTrack?.sourceURL.path == "/tmp/roundtrip-audio.m4a")
+        #expect(rebuilt.audioTrack?.volume == 0.8)
+        #expect(rebuilt.audioTrack?.loopEnabled == true)
     }
 
     @Test
@@ -102,6 +110,7 @@ struct RenderTemplateTests {
         #expect(settings.canvas.paperWhite == CanvasSettings.default.paperWhite)
         #expect(settings.canvas.strokeGray == CanvasSettings.default.strokeGray)
         #expect(settings.canvas.textGray == CanvasSettings.default.textGray)
+        #expect(settings.audioTrack == nil)
     }
 
     @Test
@@ -137,6 +146,7 @@ struct RenderTemplateTests {
         #expect(settings.transitionEnabled == true)
         #expect(settings.effectiveTransitionDuration == settings.transitionDuration)
         #expect(settings.orientationStrategy == .followAsset)
+        #expect(settings.audioTrack == nil)
     }
 
     @Test

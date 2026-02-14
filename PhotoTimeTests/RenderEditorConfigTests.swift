@@ -23,6 +23,9 @@ struct RenderEditorConfigTests {
         config.plateFontSize = 100
         config.prefetchRadius = -3
         config.prefetchMaxConcurrent = 0
+        config.audioEnabled = true
+        config.audioFilePath = "/tmp/test.m4a"
+        config.audioVolume = 2
 
         config.clampToSafeRange()
 
@@ -44,6 +47,7 @@ struct RenderEditorConfigTests {
         #expect(config.plateFontSize == RenderEditorConfig.plateFontSizeRange.upperBound)
         #expect(config.prefetchRadius == RenderEditorConfig.prefetchRadiusRange.lowerBound)
         #expect(config.prefetchMaxConcurrent == RenderEditorConfig.prefetchMaxConcurrentRange.lowerBound)
+        #expect(config.audioVolume == RenderEditorConfig.audioVolumeRange.upperBound)
     }
 
     @Test
@@ -72,6 +76,10 @@ struct RenderEditorConfigTests {
         config.enableKenBurns = false
         config.prefetchRadius = 3
         config.prefetchMaxConcurrent = 4
+        config.audioEnabled = true
+        config.audioFilePath = "/tmp/bgm.m4a"
+        config.audioVolume = 0.72
+        config.audioLoopEnabled = true
 
         let rebuilt = RenderEditorConfig(template: config.template)
 
@@ -98,6 +106,10 @@ struct RenderEditorConfigTests {
         #expect(rebuilt.enableKenBurns == config.enableKenBurns)
         #expect(rebuilt.prefetchRadius == config.prefetchRadius)
         #expect(rebuilt.prefetchMaxConcurrent == config.prefetchMaxConcurrent)
+        #expect(rebuilt.audioEnabled == config.audioEnabled)
+        #expect(rebuilt.audioFilePath == config.audioFilePath)
+        #expect(rebuilt.audioVolume == config.audioVolume)
+        #expect(rebuilt.audioLoopEnabled == config.audioLoopEnabled)
     }
 
     @Test
@@ -139,5 +151,14 @@ struct RenderEditorConfigTests {
         #expect(settings.plate.height == 72)
         #expect(settings.plate.baselineOffset == 10)
         #expect(settings.plate.fontSize == 21)
+    }
+
+    @Test
+    func audioEnabledWithoutFilePathIsInvalid() {
+        var config = RenderEditorConfig()
+        config.audioEnabled = true
+        config.audioFilePath = " "
+
+        #expect(config.invalidMessage?.contains("音频") == true)
     }
 }

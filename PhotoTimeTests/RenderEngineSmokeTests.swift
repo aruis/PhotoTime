@@ -295,6 +295,119 @@ struct RenderEngineSmokeTests {
         #expect(logText.contains("timing totals"))
         #expect(logText.contains("stageMs(load="))
         #expect(logText.contains("prefetchMaxConcurrent="))
+        #expect(logText.contains("audio track: disabled"))
+        #expect(!logText.contains("audio mux start"))
+    }
+
+    @Test
+    func exportPipelineIncludesAudioTrackWhenConfigured() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeAudioSmoke-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 4)
+        let audioURL = tempDir.appendingPathComponent("tone.caf")
+        try writeToneAudio(to: audioURL, duration: 2.2)
+        let outputURL = tempDir.appendingPathComponent("smoke-audio.mp4")
+
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.5,
+            transitionDuration: 0.1,
+            enableKenBurns: false,
+            audioTrack: AudioTrackSettings(sourceURL: audioURL, volume: 0.8)
+        )
+
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+
+        let asset = AVAsset(url: outputURL)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(!audioTracks.isEmpty)
+
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("audio track: enabled"))
+        #expect(logText.contains("loop=off"))
+        #expect(logText.contains("audio mux completed"))
+    }
+
+    @Test
+    func exportPipelineKeepsShortAudioWithoutLoop() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeAudioNoLoop-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 6)
+        let audioURL = tempDir.appendingPathComponent("short-noloop.caf")
+        try writeToneAudio(to: audioURL, duration: 0.35)
+        let outputURL = tempDir.appendingPathComponent("smoke-audio-noloop.mp4")
+
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.45,
+            transitionDuration: 0.1,
+            enableKenBurns: false,
+            audioTrack: AudioTrackSettings(sourceURL: audioURL, volume: 1, loopEnabled: false)
+        )
+
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+
+        let asset = AVAsset(url: outputURL)
+        let videoDuration = try await asset.load(.duration).seconds
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(!audioTracks.isEmpty)
+
+        let audioDuration = audioTracks.first?.timeRange.duration.seconds ?? 0
+        #expect(audioDuration > 0.2)
+        #expect(audioDuration + 0.2 < videoDuration)
+
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("loop=off"))
+    }
+
+    @Test
+    func exportPipelineLoopsAudioTrackWhenEnabled() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTimeAudioLoop-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURLs = try makeTestImages(in: tempDir, count: 6)
+        let audioURL = tempDir.appendingPathComponent("short-tone.caf")
+        try writeToneAudio(to: audioURL, duration: 0.35)
+        let outputURL = tempDir.appendingPathComponent("smoke-audio-loop.mp4")
+
+        let settings = RenderSettings(
+            outputSize: CGSize(width: 1280, height: 720),
+            fps: 15,
+            imageDuration: 0.45,
+            transitionDuration: 0.1,
+            enableKenBurns: false,
+            audioTrack: AudioTrackSettings(sourceURL: audioURL, volume: 1, loopEnabled: true)
+        )
+
+        let engine = RenderEngine(settings: settings)
+        try await engine.export(imageURLs: imageURLs, outputURL: outputURL) { _ in }
+
+        let asset = AVAsset(url: outputURL)
+        let videoDuration = try await asset.load(.duration).seconds
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(!audioTracks.isEmpty)
+
+        let audioDuration = audioTracks.first?.timeRange.duration.seconds ?? 0
+        #expect(audioDuration > 0.9)
+        #expect(abs(audioDuration - videoDuration) < 0.2)
+
+        let logURL = outputURL.deletingPathExtension().appendingPathExtension("render.log")
+        let logText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        #expect(logText.contains("loop=on"))
     }
 
     @Test(arguments: stressCounts)
@@ -465,6 +578,34 @@ struct RenderEngineSmokeTests {
         guard CGImageDestinationFinalize(destination) else {
             throw NSError(domain: "RenderEngineSmokeTests", code: 4)
         }
+    }
+
+    private func writeToneAudio(to url: URL, duration: TimeInterval) throws {
+        let sampleRate = 44_100.0
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 30)
+        }
+        let frameCount = AVAudioFrameCount(duration * sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 31)
+        }
+        buffer.frameLength = frameCount
+
+        guard let channelData = buffer.floatChannelData?[0] else {
+            throw NSError(domain: "RenderEngineSmokeTests", code: 32)
+        }
+
+        let frequency = 440.0
+        let amplitude: Float = 0.2
+        for index in 0..<Int(frameCount) {
+            let t = Double(index) / sampleRate
+            channelData[index] = sin(2.0 * .pi * frequency * t).isFinite
+                ? Float(sin(2.0 * .pi * frequency * t)) * amplitude
+                : 0
+        }
+
+        let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
+        try audioFile.write(from: buffer)
     }
 
     private func runStressExport(imageCount: Int, attempt: Int) async throws -> StressRunResult {
