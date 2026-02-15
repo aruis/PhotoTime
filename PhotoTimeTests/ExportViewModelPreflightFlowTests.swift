@@ -1,4 +1,5 @@
 import CoreGraphics
+import AVFoundation
 import Foundation
 import ImageIO
 import Testing
@@ -78,6 +79,43 @@ struct ExportViewModelPreflightFlowTests {
         #expect(viewModel.config.audioEnabled == true)
         #expect(viewModel.config.audioFilePath == audioURL.path)
         #expect(viewModel.audioStatusMessage?.contains("音频已就绪") == true)
+    }
+
+    @Test
+    func selectedAudioDurationLoadsAfterValidImport() async throws {
+        let viewModel = ExportViewModel()
+        let tempDir = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let audioURL = tempDir.appendingPathComponent("tone.caf")
+        try Self.writeToneAudio(to: audioURL, duration: 0.45)
+
+        let imported = viewModel.importDroppedAudioTrack([audioURL])
+
+        #expect(imported == true)
+        try await Self.waitUntil {
+            await MainActor.run { viewModel.selectedAudioDuration != nil }
+        }
+        #expect((viewModel.selectedAudioDuration ?? 0) > 0.3)
+    }
+
+    @Test
+    func selectedAudioDurationClearsAfterRemovingTrack() async throws {
+        let viewModel = ExportViewModel()
+        let tempDir = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let audioURL = tempDir.appendingPathComponent("tone.caf")
+        try Self.writeToneAudio(to: audioURL, duration: 0.45)
+
+        let imported = viewModel.importDroppedAudioTrack([audioURL])
+        #expect(imported == true)
+        try await Self.waitUntil {
+            await MainActor.run { viewModel.selectedAudioDuration != nil }
+        }
+
+        viewModel.clearAudioTrack()
+        #expect(viewModel.selectedAudioDuration == nil)
     }
 
     @Test
@@ -211,6 +249,34 @@ struct ExportViewModelPreflightFlowTests {
         guard CGImageDestinationFinalize(destination) else {
             throw NSError(domain: "ExportViewModelPreflightFlowTests", code: 4)
         }
+    }
+
+    private static func writeToneAudio(to url: URL, duration: TimeInterval) throws {
+        let sampleRate = 44_100.0
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            throw NSError(domain: "ExportViewModelPreflightFlowTests", code: 30)
+        }
+        let frameCount = AVAudioFrameCount(duration * sampleRate)
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            throw NSError(domain: "ExportViewModelPreflightFlowTests", code: 31)
+        }
+        buffer.frameLength = frameCount
+
+        guard let channelData = buffer.floatChannelData?[0] else {
+            throw NSError(domain: "ExportViewModelPreflightFlowTests", code: 32)
+        }
+
+        let frequency = 440.0
+        let amplitude: Float = 0.2
+        for index in 0..<Int(frameCount) {
+            let t = Double(index) / sampleRate
+            channelData[index] = sin(2.0 * .pi * frequency * t).isFinite
+                ? Float(sin(2.0 * .pi * frequency * t)) * amplitude
+                : 0
+        }
+
+        let audioFile = try AVAudioFile(forWriting: url, settings: format.settings)
+        try audioFile.write(from: buffer)
     }
 
     private static func waitUntil(
