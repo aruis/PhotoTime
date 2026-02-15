@@ -460,6 +460,7 @@ extension ExportViewModel {
                 )
                 let advice = ExportRecoveryAdvisor.advice(for: failureContext)
                 recoveryAdvice = advice
+                await ExportFailureTelemetry.shared.record(failureContext)
                 workflow.finishExportFailure(
                     message: makeErrorStatus(
                         context: failureContext,

@@ -49,4 +49,36 @@ struct ExportRecoveryAdvisorTests {
         let advice = ExportRecoveryAdvisor.advice(for: context)
         #expect(advice.action == .reauthorizeAccess)
     }
+
+    @Test
+    func imageLoadAdviceUsesFailedAssetContextWhenAvailable() {
+        let context = ExportFailureContext(
+            code: "E_IMAGE_LOAD",
+            stage: .export,
+            message: "素材加载失败",
+            failedAssetNames: ["broken.jpg"],
+            logPath: "/tmp/render.log",
+            rawDescription: "素材加载失败"
+        )
+
+        let advice = ExportRecoveryAdvisor.advice(for: context)
+        #expect(advice.action == .reselectAssets)
+        #expect(advice.message.contains("移除或替换"))
+    }
+
+    @Test
+    func imageLoadAdviceFallsBackWhenFailedAssetUnknown() {
+        let context = ExportFailureContext(
+            code: "E_IMAGE_LOAD",
+            stage: .export,
+            message: "素材加载失败",
+            failedAssetNames: [],
+            logPath: "/tmp/render.log",
+            rawDescription: "素材加载失败"
+        )
+
+        let advice = ExportRecoveryAdvisor.advice(for: context)
+        #expect(advice.action == .reselectAssets)
+        #expect(advice.message.contains("检查素材"))
+    }
 }
