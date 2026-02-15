@@ -264,6 +264,10 @@ struct ContentView: View {
                     Button("重试上次导出") { viewModel.retryLastExport() }
                         .accessibilityIdentifier("secondary_retry_export")
                         .disabled(!viewModel.actionAvailability.canRetryExport)
+                    Divider()
+                    Button("导出排障包") { viewModel.exportDiagnosticsBundle() }
+                        .accessibilityIdentifier("secondary_export_diagnostics")
+                        .disabled(viewModel.isBusy)
                 }
             }
         }
