@@ -182,6 +182,26 @@ struct ExportViewModelPreflightFlowTests {
     }
 
     @Test
+    func exportBlocksWhenOutputPathIsNotWritable() async throws {
+        let recorder = ExportCallRecorder()
+        let engine = TestRenderingEngine(recorder: recorder)
+        let viewModel = ExportViewModel(makeEngine: { _ in engine })
+
+        let tempDir = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURL = tempDir.appendingPathComponent("good.png")
+        try Self.writeImage(to: imageURL, width: 1200, height: 800)
+        viewModel.imageURLs = [imageURL]
+        viewModel.outputURL = URL(fileURLWithPath: "/System/Library/PhotoTime-Blocked-\(UUID().uuidString).mp4")
+
+        viewModel.export()
+
+        #expect(viewModel.statusMessage.contains("导出路径不可写"))
+        #expect(await recorder.exportCallCount() == 0)
+    }
+
+    @Test
     func skipPreflightIssuesExportsOnlyNonBlockingAssets() async throws {
         let recorder = ExportCallRecorder()
         let engine = TestRenderingEngine(recorder: recorder)

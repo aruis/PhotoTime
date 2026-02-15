@@ -88,6 +88,10 @@ extension ExportViewModel {
             workflow.setIdleMessage("请先选择导出路径")
             return
         }
+        guard Self.isOutputPathWritable(outputURL) else {
+            workflow.setIdleMessage("导出路径不可写，请重新选择可写目录。")
+            return
+        }
 
         config.clampToSafeRange()
         guard isSettingsValid else {
@@ -682,5 +686,31 @@ extension ExportViewModel {
             lines.append("audio disabled")
         }
         return lines
+    }
+
+    private static func isOutputPathWritable(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        let directoryURL = url.deletingLastPathComponent()
+
+        do {
+            try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        } catch {
+            return false
+        }
+
+        if fm.fileExists(atPath: url.path) {
+            return fm.isWritableFile(atPath: url.path)
+        }
+
+        guard fm.isWritableFile(atPath: directoryURL.path) else {
+            return false
+        }
+
+        let probeURL = directoryURL.appendingPathComponent(".phototime-write-probe-\(UUID().uuidString)")
+        let created = fm.createFile(atPath: probeURL.path, contents: Data())
+        if created {
+            try? fm.removeItem(at: probeURL)
+        }
+        return created
     }
 }
