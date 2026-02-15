@@ -67,7 +67,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 
 2. 可观测性与排障效率
 - [x] 增加导出失败类型聚合统计（本地日志维度），便于快速判断高频失败原因。
-- [ ] 增加一键采集最小排障包（配置快照 + 最近日志路径 + 失败摘要）的开发者入口（非 UI 测试覆盖）。
+- [x] 增加一键采集最小排障包（配置快照 + 最近日志路径 + 失败摘要）的开发者入口（非 UI 测试覆盖）。
 
 3. 发布工程化与交付质量门
 - [x] 建立 CI 质量门（非 UI 测试 + 关键 UI smoke + 音频回归）。
@@ -145,6 +145,8 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
   - `./scripts/test-ui-smoke.sh`
 - 本地 CI 门禁串联（non-ui + audio + ui smoke）：
   - `./scripts/test-ci-gate.sh`
+- 一键采集最小排障包（环境信息 + 导出失败聚合 + 最近 render 日志 + 配置快照）：
+  - `./scripts/collect-diagnostics.sh`
 - GitHub Actions CI：
   - `.github/workflows/ci.yml` 在 `push/pull_request` 上并行执行：
     - Non-UI Tests
