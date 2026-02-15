@@ -86,6 +86,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var preflightIssueFilter: PreflightIssueFilter = .all
     @Published var config = RenderEditorConfig()
     @Published var audioStatusMessage: String?
+    @Published private(set) var selectedAudioDuration: TimeInterval?
     @Published var isAudioPreviewPlaying = false
     @Published var recoveryAdvice: RecoveryAdvice?
     @Published private var workflow = ExportWorkflowModel()
@@ -101,6 +102,8 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     private var autoPreviewRefreshEnabled = true
     private var timelinePreviewEnabled = true
     private var previewAudioPlayer: AVAudioPlayer?
+    private var audioDurationTask: Task<Void, Never>?
+    private var lastAudioDurationLookupKey = ""
 
     init(makeEngine: @escaping (RenderSettings) -> any RenderingEngineClient = { settings in
         RenderEngine(settings: settings)
@@ -112,6 +115,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
             workflow.setIdleMessage("默认导出路径已设置：\(outputURL.lastPathComponent)（可修改）")
         }
         applyUITestScenarioIfNeeded()
+        refreshSelectedAudioDuration(force: true)
     }
 
     var isBusy: Bool {
@@ -228,16 +232,6 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !path.isEmpty else { return nil }
         return URL(fileURLWithPath: path).lastPathComponent
-    }
-
-    var selectedAudioDuration: TimeInterval? {
-        guard config.audioEnabled else { return nil }
-        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return nil }
-        let url = URL(fileURLWithPath: path)
-        let duration = AVURLAsset(url: url).duration.seconds
-        guard duration.isFinite, duration > 0 else { return nil }
-        return duration
     }
 
     var canPreviewAudio: Bool {
@@ -386,6 +380,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         audioStatusMessage = message
         config.audioEnabled = false
         config.audioFilePath = ""
+        refreshSelectedAudioDuration(force: true)
         workflow.setIdleMessage("音频导入失败: \(message)")
         return false
     }
@@ -398,6 +393,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         config.audioFilePath = ""
         config.audioVolume = 1
         audioStatusMessage = nil
+        refreshSelectedAudioDuration(force: true)
         if let previous {
             workflow.setIdleMessage("已清除音频: \(previous)")
         } else {
@@ -421,6 +417,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
             config.audioVolume = 1
         }
         audioStatusMessage = "音频已就绪：\(url.lastPathComponent)。导出时将附加单轨背景音频。"
+        refreshSelectedAudioDuration(force: true)
         workflow.setIdleMessage("\(sourceDescription): \(url.lastPathComponent)")
     }
 
@@ -952,6 +949,9 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
             audioStatusMessage = nil
             stopAudioPreview()
         }
+
+        refreshSelectedAudioDuration()
+
         guard autoPreviewRefreshEnabled else { return }
         previewStatusMessage = "参数已变更，预览将自动刷新"
         schedulePreviewRegeneration()
@@ -1270,6 +1270,46 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         return [urls[index].lastPathComponent]
     }
 
+    private var audioDurationLookupKey: String {
+        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(config.audioEnabled ? 1 : 0)|\(path)"
+    }
+
+    private func refreshSelectedAudioDuration(force: Bool = false) {
+        let lookupKey = audioDurationLookupKey
+        if !force, lookupKey == lastAudioDurationLookupKey {
+            return
+        }
+        lastAudioDurationLookupKey = lookupKey
+
+        audioDurationTask?.cancel()
+        selectedAudioDuration = nil
+
+        guard config.audioEnabled else { return }
+        let path = config.audioFilePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: path)
+
+        audioDurationTask = Task { [weak self] in
+            let duration = await Self.loadAudioDuration(from: url)
+            guard let self, !Task.isCancelled else { return }
+            guard self.audioDurationLookupKey == lookupKey else { return }
+            self.selectedAudioDuration = duration
+        }
+    }
+
+    private static func loadAudioDuration(from url: URL) async -> TimeInterval? {
+        let asset = AVURLAsset(url: url)
+        do {
+            let duration = try await asset.load(.duration)
+            let seconds = duration.seconds
+            guard seconds.isFinite, seconds > 0 else { return nil }
+            return seconds
+        } catch {
+            return nil
+        }
+    }
+
     private func makeErrorStatus(
         error: Error,
         logURL: URL,
@@ -1306,15 +1346,12 @@ private enum AssetThumbnailPipeline {
         return cache
     }()
 
+    @MainActor
     static func cachedImage(for url: URL) -> NSImage? {
         cache.object(forKey: url as NSURL)
     }
 
-    static func loadThumbnail(for url: URL, maxPixelSize: Int) -> NSImage? {
-        if let cached = cache.object(forKey: url as NSURL) {
-            return cached
-        }
-
+    nonisolated static func renderThumbnail(for url: URL, maxPixelSize: Int) -> NSImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             return nil
         }
@@ -1330,9 +1367,12 @@ private enum AssetThumbnailPipeline {
             return nil
         }
 
-        let image = NSImage(cgImage: cgImage, size: .zero)
+        return NSImage(cgImage: cgImage, size: .zero)
+    }
+
+    @MainActor
+    static func cacheImage(_ image: NSImage, for url: URL) {
         cache.setObject(image, forKey: url as NSURL)
-        return image
     }
 }
 
@@ -1363,9 +1403,12 @@ private struct AssetThumbnailView: View {
             }
             let target = Int(height * 2.5)
             let loaded = await Task.detached(priority: .utility) {
-                AssetThumbnailPipeline.loadThumbnail(for: url, maxPixelSize: target)
+                AssetThumbnailPipeline.renderThumbnail(for: url, maxPixelSize: target)
             }.value
             guard !Task.isCancelled else { return }
+            if let loaded {
+                AssetThumbnailPipeline.cacheImage(loaded, for: url)
+            }
             image = loaded
         }
     }
