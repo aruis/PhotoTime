@@ -81,4 +81,34 @@ struct ExportRecoveryAdvisorTests {
         #expect(advice.action == .reselectAssets)
         #expect(advice.message.contains("检查素材"))
     }
+
+    @Test
+    func advisorMapsPermissionDeniedToReauthorize() {
+        let context = ExportFailureContext(
+            code: nil,
+            stage: .export,
+            message: "导出失败",
+            failedAssetNames: [],
+            logPath: "/tmp/render.log",
+            rawDescription: "Permission denied while writing output file"
+        )
+
+        let advice = ExportRecoveryAdvisor.advice(for: context)
+        #expect(advice.action == .reauthorizeAccess)
+    }
+
+    @Test
+    func advisorMapsDiskFullToFreeSpace() {
+        let context = ExportFailureContext(
+            code: nil,
+            stage: .export,
+            message: "导出失败",
+            failedAssetNames: [],
+            logPath: "/tmp/render.log",
+            rawDescription: "No space left on device"
+        )
+
+        let advice = ExportRecoveryAdvisor.advice(for: context)
+        #expect(advice.action == .freeDiskSpace)
+    }
 }
