@@ -97,5 +97,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 - 近期默认仅跑非 UI 测试（`PhotoTimeTests`），跳过 `PhotoTimeUITests`。
 - 一键命令：
   - `./scripts/test-non-ui.sh`
+- 音频导出关键回归（单轨附加 + 非循环 + 循环）：
+  - `./scripts/test-audio-regression.sh`
 - 等价 `xcodebuild` 命令（带 ad-hoc 签名，避免本机调试库签名导致的测试启动失败）：
   - `xcodebuild test -project PhotoTime.xcodeproj -scheme PhotoTime -destination 'platform=macOS' -derivedDataPath .derivedData CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-' -only-testing:PhotoTimeTests`
