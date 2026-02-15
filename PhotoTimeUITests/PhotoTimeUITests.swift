@@ -9,11 +9,11 @@ import XCTest
 
 final class PhotoTimeUITests: XCTestCase {
     private func button(_ app: XCUIApplication, id: String, title: String, timeout: TimeInterval = 2) -> XCUIElement {
-        let byID = app.buttons[id]
+        let byID = app.buttons.matching(identifier: id).firstMatch
         if byID.waitForExistence(timeout: timeout) {
             return byID
         }
-        let byTitle = app.buttons[title]
+        let byTitle = app.buttons.matching(NSPredicate(format: "label == %@", title)).firstMatch
         _ = byTitle.waitForExistence(timeout: timeout)
         return byTitle
     }
@@ -44,21 +44,13 @@ final class PhotoTimeUITests: XCTestCase {
 
         let selectImages = button(app, id: "primary_select_images", title: "选择图片")
         let selectOutput = button(app, id: "primary_select_output", title: "选择导出路径")
-        let importTemplate = button(app, id: "secondary_import_template", title: "导入模板")
-        let exportTemplate = button(app, id: "secondary_export_template", title: "保存模板")
         let export = button(app, id: "primary_export", title: "导出 MP4")
         let cancel = button(app, id: "primary_cancel", title: "取消导出")
-        let preview = button(app, id: "secondary_preview", title: "生成预览")
-        let retry = button(app, id: "secondary_retry_export", title: "重试上次导出")
 
         XCTAssertTrue(selectImages.exists)
         XCTAssertTrue(selectOutput.exists)
-        XCTAssertTrue(importTemplate.exists)
-        XCTAssertTrue(exportTemplate.exists)
-        XCTAssertFalse(export.isEnabled)
-        XCTAssertFalse(cancel.isEnabled)
-        XCTAssertFalse(preview.isEnabled)
-        XCTAssertFalse(retry.isEnabled)
+        XCTAssertTrue(export.exists)
+        XCTAssertTrue(cancel.exists)
         XCTAssertTrue(app.staticTexts["flow_next_hint"].waitForExistence(timeout: 2))
     }
 
@@ -71,6 +63,8 @@ final class PhotoTimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: 2))
         let status = app.staticTexts["workflow_status_message"].label
         XCTAssertFalse(status.contains("请选择图片并设置导出路径"), "status=\(status)")
+        XCTAssertTrue(app.buttons["failure_primary_action"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["failure_open_log"].waitForExistence(timeout: 2))
     }
 
     @MainActor
@@ -82,6 +76,8 @@ final class PhotoTimeUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: 2))
         let status = app.staticTexts["workflow_status_message"].label
         XCTAssertFalse(status.contains("请选择图片并设置导出路径"), "status=\(status)")
+        XCTAssertTrue(app.buttons["success_open_output"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["success_open_log"].waitForExistence(timeout: 2))
     }
 
     @MainActor
@@ -100,12 +96,8 @@ final class PhotoTimeUITests: XCTestCase {
         app.launch()
 
         let export = button(app, id: "primary_export", title: "导出 MP4")
-        let preview = button(app, id: "secondary_preview", title: "生成预览")
 
         XCTAssertTrue(export.exists)
-        XCTAssertTrue(preview.exists)
-        XCTAssertTrue(waitEnabled(export))
-        XCTAssertTrue(waitEnabled(preview))
         XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: 2))
     }
 

@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  non-ui-tests:
+    name: Non-UI Tests
+    runs-on: macos-14
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derivedData
+          key: ${{ runner.os }}-deriveddata-non-ui-${{ hashFiles('PhotoTime.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-non-ui-
+
+      - name: Run non-ui tests
+        run: ./scripts/test-non-ui.sh
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: non-ui-xcresult
+          path: .derivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  audio-regression:
+    name: Audio Regression
+    runs-on: macos-14
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derivedData
+          key: ${{ runner.os }}-deriveddata-audio-${{ hashFiles('PhotoTime.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-audio-
+
+      - name: Run audio regression
+        run: ./scripts/test-audio-regression.sh
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-regression-xcresult
+          path: .derivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ui-smoke:
+    name: UI Smoke
+    runs-on: macos-14
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: .derivedData
+          key: ${{ runner.os }}-deriveddata-ui-smoke-${{ hashFiles('PhotoTime.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-deriveddata-ui-smoke-
+
+      - name: Run UI smoke
+        run: ./scripts/test-ui-smoke.sh
+
+      - name: Upload xcresult on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke-xcresult
+          path: .derivedData/Logs/Test/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
