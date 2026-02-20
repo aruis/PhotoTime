@@ -202,6 +202,46 @@ struct ExportViewModelPreflightFlowTests {
     }
 
     @Test
+    func exportBlocksWhenOutputExtensionIsNotMP4() async throws {
+        let recorder = ExportCallRecorder()
+        let engine = TestRenderingEngine(recorder: recorder)
+        let viewModel = ExportViewModel(makeEngine: { _ in engine })
+
+        let tempDir = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURL = tempDir.appendingPathComponent("good.png")
+        try Self.writeImage(to: imageURL, width: 1200, height: 800)
+        viewModel.imageURLs = [imageURL]
+        viewModel.outputURL = tempDir.appendingPathComponent("out.mov")
+
+        viewModel.export()
+
+        #expect(viewModel.statusMessage.contains(".mp4"))
+        #expect(await recorder.exportCallCount() == 0)
+    }
+
+    @Test
+    func exportBlocksWhenOutputURLPointsToDirectory() async throws {
+        let recorder = ExportCallRecorder()
+        let engine = TestRenderingEngine(recorder: recorder)
+        let viewModel = ExportViewModel(makeEngine: { _ in engine })
+
+        let tempDir = try Self.makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let imageURL = tempDir.appendingPathComponent("good.png")
+        try Self.writeImage(to: imageURL, width: 1200, height: 800)
+        viewModel.imageURLs = [imageURL]
+        viewModel.outputURL = URL(fileURLWithPath: tempDir.path, isDirectory: true)
+
+        viewModel.export()
+
+        #expect(viewModel.statusMessage.contains("文件夹"))
+        #expect(await recorder.exportCallCount() == 0)
+    }
+
+    @Test
     func skipPreflightIssuesExportsOnlyNonBlockingAssets() async throws {
         let recorder = ExportCallRecorder()
         let engine = TestRenderingEngine(recorder: recorder)

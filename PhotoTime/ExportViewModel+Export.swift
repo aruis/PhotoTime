@@ -88,8 +88,8 @@ extension ExportViewModel {
             workflow.setIdleMessage("请先选择导出路径")
             return
         }
-        guard Self.isOutputPathWritable(outputURL) else {
-            workflow.setIdleMessage("导出路径不可写，请重新选择可写目录。")
+        if let outputValidationMessage = Self.validateOutputURL(outputURL) {
+            workflow.setIdleMessage(outputValidationMessage)
             return
         }
 
@@ -688,22 +688,31 @@ extension ExportViewModel {
         return lines
     }
 
-    private static func isOutputPathWritable(_ url: URL) -> Bool {
+    private static func validateOutputURL(_ url: URL) -> String? {
         let fm = FileManager.default
+        var isDirectory: ObjCBool = false
+        if fm.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
+            return "导出路径不能是文件夹，请选择具体的 .mp4 文件。"
+        }
+
+        guard url.pathExtension.lowercased() == "mp4" else {
+            return "导出文件需使用 .mp4 扩展名。"
+        }
+
         let directoryURL = url.deletingLastPathComponent()
 
         do {
             try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         } catch {
-            return false
+            return "导出路径不可写，请重新选择可写目录。"
         }
 
         if fm.fileExists(atPath: url.path) {
-            return fm.isWritableFile(atPath: url.path)
+            return fm.isWritableFile(atPath: url.path) ? nil : "导出路径不可写，请重新选择可写目录。"
         }
 
         guard fm.isWritableFile(atPath: directoryURL.path) else {
-            return false
+            return "导出路径不可写，请重新选择可写目录。"
         }
 
         let probeURL = directoryURL.appendingPathComponent(".phototime-write-probe-\(UUID().uuidString)")
@@ -711,6 +720,6 @@ extension ExportViewModel {
         if created {
             try? fm.removeItem(at: probeURL)
         }
-        return created
+        return created ? nil : "导出路径不可写，请重新选择可写目录。"
     }
 }
