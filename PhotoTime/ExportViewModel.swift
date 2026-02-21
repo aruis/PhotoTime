@@ -89,6 +89,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     @Published var selectedAudioDuration: TimeInterval?
     @Published var isAudioPreviewPlaying = false
     @Published var recoveryAdvice: RecoveryAdvice?
+    @Published var failureCardCopy: FailureCardCopy?
     @Published var workflow = ExportWorkflowModel()
 
     let makeEngine: (RenderSettings) -> any RenderingEngineClient
@@ -143,7 +144,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     var hasFailureCard: Bool {
-        workflow.state == .failed && recoveryAdvice != nil
+        workflow.state == .failed && recoveryAdvice != nil && failureCardCopy != nil
     }
 
     var hasSuccessCard: Bool {

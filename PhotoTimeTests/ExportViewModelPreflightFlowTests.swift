@@ -242,6 +242,28 @@ struct ExportViewModelPreflightFlowTests {
     }
 
     @Test
+    func previewFailureUsesStructuredFailureMessageWithStage() async throws {
+        let recorder = ExportCallRecorder()
+        let engine = TestRenderingEngine(
+            recorder: recorder,
+            previewError: RenderEngineError.assetLoadFailed(index: 0, message: "bad data")
+        )
+        let viewModel = ExportViewModel(makeEngine: { _ in engine })
+
+        viewModel.outputURL = URL(fileURLWithPath: "/tmp/PhotoTime-PreviewFail-\(UUID().uuidString).mp4")
+        viewModel.imageURLs = [URL(fileURLWithPath: "/tmp/failure-preview.jpg")]
+        viewModel.generatePreview()
+
+        try await Self.waitUntil {
+            await MainActor.run {
+                viewModel.previewErrorMessage?.contains("[E_IMAGE_LOAD]") == true
+            }
+        }
+        #expect(viewModel.statusMessage.contains("失败阶段: 预览"))
+        #expect(viewModel.statusMessage.contains("建议动作"))
+    }
+
+    @Test
     func skipPreflightIssuesExportsOnlyNonBlockingAssets() async throws {
         let recorder = ExportCallRecorder()
         let engine = TestRenderingEngine(recorder: recorder)
@@ -377,9 +399,11 @@ private actor ExportCallRecorder {
 
 private final class TestRenderingEngine: RenderingEngineClient {
     private let recorder: ExportCallRecorder
+    private let previewError: Error?
 
-    init(recorder: ExportCallRecorder) {
+    init(recorder: ExportCallRecorder, previewError: Error? = nil) {
         self.recorder = recorder
+        self.previewError = previewError
     }
 
     func export(
@@ -392,6 +416,9 @@ private final class TestRenderingEngine: RenderingEngineClient {
     }
 
     func previewFrame(imageURLs: [URL], at second: TimeInterval) async throws -> CGImage {
+        if let previewError {
+            throw previewError
+        }
         guard let context = CGContext(
             data: nil,
             width: 1,

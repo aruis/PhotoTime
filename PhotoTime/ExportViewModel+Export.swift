@@ -310,15 +310,24 @@ extension ExportViewModel {
                 previewErrorMessage = nil
                 workflow.finishPreviewSuccess()
             } catch {
-                if let renderError = error as? RenderEngineError {
-                    previewStatusMessage = "预览生成失败"
-                    previewErrorMessage = "[\(renderError.code)] \(renderError.localizedDescription)"
-                    workflow.finishPreviewFailure(message: "[\(renderError.code)] \(renderError.localizedDescription)")
-                } else {
-                    previewStatusMessage = "预览生成失败"
-                    previewErrorMessage = error.localizedDescription
-                    workflow.finishPreviewFailure(message: error.localizedDescription)
-                }
+                let logURL = outputURL.map { RenderLogger.resolvedLogURL(for: $0) }
+                let failureContext = ExportFailureContext.from(
+                    error: error,
+                    failedAssetNames: [],
+                    logURL: logURL,
+                    stage: .preview
+                )
+                let advice = ExportRecoveryAdvisor.advice(for: failureContext)
+                previewStatusMessage = "预览生成失败"
+                previewErrorMessage = failureContext.displayHead
+                failureCardCopy = nil
+                workflow.finishPreviewFailure(
+                    message: makeErrorStatus(
+                        context: failureContext,
+                        advice: advice
+                    )
+                )
+                await ExportFailureTelemetry.shared.record(failureContext)
             }
         }
     }
@@ -424,6 +433,7 @@ extension ExportViewModel {
 
         failedAssetNames = []
         recoveryAdvice = nil
+        failureCardCopy = nil
 
         let urls = request.imageURLs
         let destination = request.outputURL
@@ -451,6 +461,7 @@ extension ExportViewModel {
                 lastSuccessfulOutputURL = destination
                 failedAssetNames = []
                 recoveryAdvice = nil
+                failureCardCopy = nil
                 lastFailedRequest = nil
             } catch {
                 lastFailedRequest = request
@@ -464,6 +475,10 @@ extension ExportViewModel {
                 )
                 let advice = ExportRecoveryAdvisor.advice(for: failureContext)
                 recoveryAdvice = advice
+                failureCardCopy = makeFailureCardCopy(
+                    context: failureContext,
+                    advice: advice
+                )
                 await ExportFailureTelemetry.shared.record(failureContext)
                 workflow.finishExportFailure(
                     message: makeErrorStatus(
@@ -498,85 +513,6 @@ extension ExportViewModel {
         NSWorkspace.shared.open(url.deletingLastPathComponent())
     }
 
-    func exportDiagnosticsBundle() {
-        do {
-            let input = DiagnosticsBundleInput(
-                destinationRoot: diagnosticsBundleRootURL(),
-                statsFileURL: exportFailureStatsURL(),
-                logsDirectoryURL: logsDirectoryURL(),
-                latestLogURL: lastLogURL,
-                configSnapshotLines: diagnosticsSnapshotLines()
-            )
-            let bundleURL = try DiagnosticsBundleBuilder.createBundle(input: input)
-            workflow.setIdleMessage("排障包已生成: \(bundleURL.path)")
-            NSWorkspace.shared.open(bundleURL)
-        } catch {
-            workflow.setIdleMessage("排障包生成失败: \(error.localizedDescription)")
-        }
-    }
-
-    func performRecoveryAction() {
-        guard let advice = recoveryAdvice else { return }
-
-        switch advice.action {
-        case .retryExport:
-            retryLastExport()
-        case .reselectAssets:
-            chooseImages()
-        case .reauthorizeAccess:
-            if let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                NSWorkspace.shared.open(settingsURL)
-            } else {
-                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
-            }
-        case .freeDiskSpace:
-            openLatestOutputDirectory()
-        case .adjustSettings:
-            workflow.setIdleMessage("请调整导出参数后再重试。")
-        case .inspectLog:
-            openLatestLog()
-        }
-    }
-
-    func applyUITestScenarioIfNeeded() {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let flagIndex = arguments.firstIndex(of: "-ui-test-scenario"), arguments.indices.contains(flagIndex + 1) else {
-            return
-        }
-
-        let scenario = arguments[flagIndex + 1]
-        switch scenario {
-        case "failure":
-            lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-failure.render.log")
-            failedAssetNames = ["broken-sample.jpg"]
-            recoveryAdvice = RecoveryAdvice(action: .retryExport, message: "测试场景：可直接重试导出。")
-            workflow.finishExportFailure(
-                message: "[E_EXPORT_PIPELINE] 测试失败\n建议动作: 重试上次导出\n建议: 测试场景\n日志: /tmp/phototime-ui-failure.render.log"
-            )
-        case "success":
-            lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-success.render.log")
-            lastSuccessfulOutputURL = URL(fileURLWithPath: "/tmp/PhotoTime-UI-Success.mp4")
-            workflow.finishExportSuccess(
-                message: "导出完成: PhotoTime-UI-Success.mp4\n日志: /tmp/phototime-ui-success.render.log"
-            )
-        case "invalid":
-            config.outputWidth = 100
-            config.outputHeight = 100
-            workflow.setIdleMessage("测试场景：参数无效")
-        case "first_run_ready":
-            imageURLs = [
-                URL(fileURLWithPath: "/tmp/first-run-a.jpg"),
-                URL(fileURLWithPath: "/tmp/first-run-b.jpg")
-            ]
-            outputURL = URL(fileURLWithPath: "/tmp/PhotoTime-FirstRun.mp4")
-            previewImage = NSImage(size: CGSize(width: 320, height: 180))
-            previewStatusMessage = "测试场景：预览已就绪"
-            workflow.setIdleMessage("测试场景：可直接导出")
-        default:
-            break
-        }
-    }
-
     var isSettingsValid: Bool {
         invalidSettingsMessage == nil
     }
@@ -607,6 +543,7 @@ extension ExportViewModel {
     ) -> String {
         return ExportStatusMessageBuilder.failure(
             head: context.displayHead,
+            stage: context.stage,
             logPath: context.logPath,
             adviceActionTitle: advice.action.title,
             adviceMessage: advice.message,
@@ -614,78 +551,16 @@ extension ExportViewModel {
         )
     }
 
-    private func diagnosticsBundleRootURL() -> URL {
-        let base = (
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
+    func makeFailureCardCopy(
+        context: ExportFailureContext,
+        advice: RecoveryAdvice
+    ) -> FailureCardCopy {
+        ExportStatusMessageBuilder.failureCardCopy(
+            stage: context.stage,
+            adviceActionTitle: advice.action.title,
+            adviceMessage: advice.message,
+            failedAssetNames: context.failedAssetNames
         )
-        return base
-            .appendingPathComponent("PhotoTime/Diagnostics/Bundles", isDirectory: true)
-    }
-
-    private func exportFailureStatsURL() -> URL {
-        let base = (
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        )
-        return base
-            .appendingPathComponent("PhotoTime/Diagnostics/export-failure-stats.json")
-    }
-
-    private func logsDirectoryURL() -> URL {
-        let base = (
-            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        )
-        return base
-            .appendingPathComponent("PhotoTime/Logs", isDirectory: true)
-    }
-
-    private func diagnosticsSnapshotLines() -> [String] {
-        let settings = config.renderSettings
-        var lines: [String] = [
-            "workflow_state=\(workflow.state.rawValue)",
-            "workflow_progress=\(String(format: "%.3f", workflow.progress))",
-            "image_count=\(imageURLs.count)",
-            "output_path=\(outputURL?.path ?? "(none)")",
-            String(
-                format: "render output=%dx%d fps=%d imageDuration=%.2f transition=%.2f(%@) kenBurns=%@",
-                Int(settings.outputSize.width),
-                Int(settings.outputSize.height),
-                Int(settings.fps),
-                settings.imageDuration,
-                settings.transitionDuration,
-                settings.transitionEnabled ? settings.transitionStyle.rawValue : "off",
-                settings.enableKenBurns ? "on" : "off"
-            ),
-            String(
-                format: "layout h=%.1f top=%.1f bottom=%.1f inner=%.1f",
-                settings.layout.horizontalMargin,
-                settings.layout.topMargin,
-                settings.layout.bottomMargin,
-                settings.layout.innerPadding
-            ),
-            String(
-                format: "plate enabled=%@ height=%.1f baseline=%.1f font=%.1f",
-                settings.plate.enabled ? "on" : "off",
-                settings.plate.height,
-                settings.plate.baselineOffset,
-                settings.plate.fontSize
-            )
-        ]
-        if let audioTrack = settings.audioTrack {
-            lines.append(
-                String(
-                    format: "audio enabled path=%@ volume=%.2f loop=%@",
-                    audioTrack.sourceURL.path,
-                    audioTrack.volume,
-                    audioTrack.loopEnabled ? "on" : "off"
-                )
-            )
-        } else {
-            lines.append("audio disabled")
-        }
-        return lines
     }
 
     private static func validateOutputURL(_ url: URL) -> String? {
@@ -722,4 +597,5 @@ extension ExportViewModel {
         }
         return created ? nil : "导出路径不可写，请重新选择可写目录。"
     }
+
 }

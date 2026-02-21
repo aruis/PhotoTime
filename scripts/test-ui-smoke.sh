@@ -15,6 +15,7 @@ xcodebuild test \
   CODE_SIGN_IDENTITY='-' \
   -only-testing:PhotoTimeUITests/PhotoTimeUITests/testPrimarySecondaryActionGroupsAndInitialButtonState \
   -only-testing:PhotoTimeUITests/PhotoTimeUITests/testFailureScenarioShowsFailureCard \
+  -only-testing:PhotoTimeUITests/PhotoTimeUITests/testFailureRecoveryActionCanReachSuccessCard \
   -only-testing:PhotoTimeUITests/PhotoTimeUITests/testSuccessScenarioShowsSuccessCard \
   -only-testing:PhotoTimeUITests/PhotoTimeUITests/testInvalidScenarioShowsInlineValidation \
   -only-testing:PhotoTimeUITests/PhotoTimeUITests/testFirstRunReadyScenarioAllowsExport

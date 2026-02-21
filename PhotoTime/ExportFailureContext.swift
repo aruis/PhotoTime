@@ -4,6 +4,17 @@ enum ExportFailureStage: String, Sendable {
     case preview
     case export
     case unknown
+
+    var displayName: String {
+        switch self {
+        case .preview:
+            return "预览"
+        case .export:
+            return "导出"
+        case .unknown:
+            return "未知"
+        }
+    }
 }
 
 struct ExportFailureContext: Sendable {

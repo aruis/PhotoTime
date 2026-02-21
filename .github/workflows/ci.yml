@@ -38,6 +38,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-deriveddata-non-ui-
 
+      - name: Run maintainability checks
+        run: ./scripts/check-maintainability.sh
+
       - name: Run non-ui tests
         run: ./scripts/test-non-ui.sh
 
