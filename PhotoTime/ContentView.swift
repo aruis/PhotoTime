@@ -88,6 +88,9 @@ struct ContentView: View {
                     }
                         .accessibilityIdentifier("secondary_preview")
                         .disabled(!viewModel.canRunPreview)
+                    Button("运行预检") { viewModel.rerunPreflight() }
+                        .accessibilityIdentifier("secondary_rerun_preflight")
+                        .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
                     Button("导入模板") { viewModel.importTemplate() }
                         .accessibilityIdentifier("secondary_import_template")
                         .disabled(!viewModel.actionAvailability.canImportTemplate)

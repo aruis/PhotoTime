@@ -7,7 +7,7 @@ struct AudioSettingsSection: View {
     let onAudioDrop: ([NSItemProvider]) -> Bool
 
     var body: some View {
-        Section("音频 v1（预研）") {
+        Section("背景音乐") {
             Toggle("启用背景音频", isOn: $viewModel.config.audioEnabled)
                 .disabled(viewModel.isBusy)
 
@@ -48,7 +48,7 @@ struct AudioSettingsSection: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("将以单轨方式附加背景音频，不支持剪辑/淡入淡出编辑。")
+                    Text("导出时会把这条音频加入视频。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -57,7 +57,7 @@ struct AudioSettingsSection: View {
                     Label("拖拽音频到此处", systemImage: "waveform")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("支持单条音频文件；将自动校验格式。")
+                    Text("支持拖入 1 条音频文件。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

@@ -68,7 +68,7 @@ struct RenderEditorConfig: Sendable {
     var transitionDuration: Double = 0.6
     var enableCrossfade: Bool = true
     var orientationStrategy: PhotoOrientationStrategy = .followAsset
-    var enableKenBurns: Bool = true
+    var enableKenBurns: Bool = false
     var frameStylePreset: FrameStylePreset = .classic
     var canvasBackgroundGray: Double = CanvasSettings.default.backgroundGray
     var canvasPaperWhite: Double = CanvasSettings.default.paperWhite

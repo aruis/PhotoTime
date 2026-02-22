@@ -14,6 +14,7 @@ extension ExportViewModel {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         outputURL = url
+        hasUserSelectedOutputURL = true
         workflow.setIdleMessage("导出路径: \(url.path)")
     }
 
@@ -88,10 +89,7 @@ extension ExportViewModel {
             workflow.setIdleMessage("请先选择导出路径")
             return
         }
-        if let outputValidationMessage = Self.validateOutputURL(outputURL) {
-            workflow.setIdleMessage(outputValidationMessage)
-            return
-        }
+        guard let outputURL = resolveOutputURLForExport(original: outputURL) else { return }
 
         config.clampToSafeRange()
         guard isSettingsValid else {
@@ -311,15 +309,20 @@ extension ExportViewModel {
                 workflow.finishPreviewSuccess()
             } catch {
                 let logURL = outputURL.map { RenderLogger.resolvedLogURL(for: $0) }
+                let previewFailedAssetNames = Self.failedAssetNames(from: error, urls: urls)
                 let failureContext = ExportFailureContext.from(
                     error: error,
-                    failedAssetNames: [],
+                    failedAssetNames: previewFailedAssetNames,
                     logURL: logURL,
                     stage: .preview
                 )
                 let advice = ExportRecoveryAdvisor.advice(for: failureContext)
                 previewStatusMessage = "预览生成失败"
                 previewErrorMessage = failureContext.displayHead
+                if !previewFailedAssetNames.isEmpty {
+                    failedAssetNames = Array(Set(failedAssetNames + previewFailedAssetNames)).sorted()
+                    fileListFilter = .problematic
+                }
                 failureCardCopy = nil
                 workflow.finishPreviewFailure(
                     message: makeErrorStatus(
@@ -443,6 +446,12 @@ extension ExportViewModel {
 
         exportTask = Task { [weak self] in
             guard let self else { return }
+            let scopedAccessEnabled = destination.startAccessingSecurityScopedResource()
+            defer {
+                if scopedAccessEnabled {
+                    destination.stopAccessingSecurityScopedResource()
+                }
+            }
             do {
                 let engine = makeEngine(settings)
                 try await engine.export(imageURLs: urls, outputURL: destination) { value in
@@ -532,9 +541,17 @@ extension ExportViewModel {
 
     static func failedAssetNames(from error: Error, urls: [URL]) -> [String] {
         guard let renderError = error as? RenderEngineError else { return [] }
-        guard case let .assetLoadFailed(index, _) = renderError else { return [] }
-        guard urls.indices.contains(index) else { return ["index=\(index)"] }
-        return [urls[index].lastPathComponent]
+        switch renderError {
+        case let .assetLoadFailed(index, _):
+            guard urls.indices.contains(index) else { return ["index=\(index)"] }
+            return [urls[index].lastPathComponent]
+        case let .imageLoadFailed(message):
+            return urls
+                .map(\.lastPathComponent)
+                .filter { message.localizedCaseInsensitiveContains($0) }
+        default:
+            return []
+        }
     }
 
     func makeErrorStatus(
@@ -563,8 +580,39 @@ extension ExportViewModel {
         )
     }
 
+    private func resolveOutputURLForExport(original: URL) -> URL? {
+        if let outputValidationMessage = Self.validateOutputURL(original) {
+            guard outputValidationMessage.contains("导出路径不可写"),
+                  !hasUserSelectedOutputURL,
+                  !Self.isRunningUnitTests() else {
+                workflow.setIdleMessage(outputValidationMessage)
+                return nil
+            }
+
+            workflow.setIdleMessage("默认导出路径当前不可写，请在弹窗中重新选择导出位置。")
+            chooseOutput()
+            guard let selectedOutputURL = outputURL else {
+                workflow.setIdleMessage("已取消选择导出路径。")
+                return nil
+            }
+            if let selectedValidationMessage = Self.validateOutputURL(selectedOutputURL) {
+                workflow.setIdleMessage(selectedValidationMessage)
+                return nil
+            }
+            return selectedOutputURL
+        }
+        return original
+    }
+
     private static func validateOutputURL(_ url: URL) -> String? {
         let fm = FileManager.default
+        let scopedAccessEnabled = url.startAccessingSecurityScopedResource()
+        defer {
+            if scopedAccessEnabled {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         var isDirectory: ObjCBool = false
         if fm.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
             return "导出路径不能是文件夹，请选择具体的 .mp4 文件。"
@@ -576,26 +624,43 @@ extension ExportViewModel {
 
         let directoryURL = url.deletingLastPathComponent()
 
+        var directoryIsDir: ObjCBool = false
+        if fm.fileExists(atPath: directoryURL.path, isDirectory: &directoryIsDir) {
+            if !directoryIsDir.boolValue {
+                return "导出路径不可写，请重新选择可写目录。"
+            }
+        } else {
+            do {
+                try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            } catch {
+                return "导出路径不可写，请重新选择可写目录。"
+            }
+        }
+
+        let outputExisted = fm.fileExists(atPath: url.path)
+        if outputExisted {
+            do {
+                let handle = try FileHandle(forWritingTo: url)
+                try handle.close()
+            } catch {
+                return "导出路径不可写，请重新选择可写目录。"
+            }
+            return nil
+        }
+
+        guard fm.createFile(atPath: url.path, contents: Data()) else {
+            return "导出路径不可写，请重新选择可写目录。"
+        }
         do {
-            try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try fm.removeItem(at: url)
         } catch {
             return "导出路径不可写，请重新选择可写目录。"
         }
+        return nil
+    }
 
-        if fm.fileExists(atPath: url.path) {
-            return fm.isWritableFile(atPath: url.path) ? nil : "导出路径不可写，请重新选择可写目录。"
-        }
-
-        guard fm.isWritableFile(atPath: directoryURL.path) else {
-            return "导出路径不可写，请重新选择可写目录。"
-        }
-
-        let probeURL = directoryURL.appendingPathComponent(".phototime-write-probe-\(UUID().uuidString)")
-        let created = fm.createFile(atPath: probeURL.path, contents: Data())
-        if created {
-            try? fm.removeItem(at: probeURL)
-        }
-        return created ? nil : "导出路径不可写，请重新选择可写目录。"
+    private static func isRunningUnitTests() -> Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
 }

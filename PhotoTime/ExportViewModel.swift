@@ -105,6 +105,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     var previewAudioPlayer: AVAudioPlayer?
     var audioDurationTask: Task<Void, Never>?
     var lastAudioDurationLookupKey = ""
+    var hasUserSelectedOutputURL = false
 
     init(makeEngine: @escaping (RenderSettings) -> any RenderingEngineClient = { settings in
         RenderEngine(settings: settings)
@@ -112,6 +113,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         self.makeEngine = makeEngine
         super.init()
         outputURL = Self.defaultOutputURL()
+        hasUserSelectedOutputURL = false
         if let outputURL {
             workflow.setIdleMessage("默认导出路径已设置：\(outputURL.lastPathComponent)（可修改）")
         }
