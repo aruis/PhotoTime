@@ -70,9 +70,15 @@ struct AssetSidebarPanel: View {
 
             Spacer(minLength: 0)
 
-            Text("\(viewModel.problematicAssetNameSet.count) 个问题")
+            Text("\(viewModel.imageURLs.count) 张")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            if viewModel.problematicAssetNameSet.count > 0 {
+                Text("· \(viewModel.problematicAssetNameSet.count) 个问题")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
 
             if !viewModel.imageURLs.isEmpty {
                 Button {

@@ -325,7 +325,8 @@ extension ExportViewModel {
                 }
                 failureCardCopy = nil
                 workflow.finishPreviewFailure(
-                    message: makeErrorStatus(
+                    message: makeConciseFailureStatus(
+                        summary: "预览生成失败，详情见预览区域提示。",
                         context: failureContext,
                         advice: advice
                     )
@@ -490,7 +491,8 @@ extension ExportViewModel {
                 )
                 await ExportFailureTelemetry.shared.record(failureContext)
                 workflow.finishExportFailure(
-                    message: makeErrorStatus(
+                    message: makeConciseFailureStatus(
+                        summary: "导出失败，请查看下方详情。",
                         context: failureContext,
                         advice: advice
                     )
@@ -554,20 +556,6 @@ extension ExportViewModel {
         }
     }
 
-    func makeErrorStatus(
-        context: ExportFailureContext,
-        advice: RecoveryAdvice
-    ) -> String {
-        return ExportStatusMessageBuilder.failure(
-            head: context.displayHead,
-            stage: context.stage,
-            logPath: context.logPath,
-            adviceActionTitle: advice.action.title,
-            adviceMessage: advice.message,
-            failedAssetNames: context.failedAssetNames
-        )
-    }
-
     func makeFailureCardCopy(
         context: ExportFailureContext,
         advice: RecoveryAdvice
@@ -578,6 +566,22 @@ extension ExportViewModel {
             adviceMessage: advice.message,
             failedAssetNames: context.failedAssetNames
         )
+    }
+
+    func makeConciseFailureStatus(
+        summary: String,
+        context: ExportFailureContext,
+        advice: RecoveryAdvice
+    ) -> String {
+        let detail = ExportStatusMessageBuilder.failure(
+            head: context.displayHead,
+            stage: context.stage,
+            logPath: context.logPath,
+            adviceActionTitle: advice.action.title,
+            adviceMessage: advice.message,
+            failedAssetNames: context.failedAssetNames
+        )
+        return "\(summary)\n\(detail)"
     }
 
     private func resolveOutputURLForExport(original: URL) -> URL? {

@@ -16,13 +16,24 @@ struct SingleFramePreviewPanel: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.secondary.opacity(0.08))
                         .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .overlay(Image(systemName: "photo"))
+                        .overlay {
+                            VStack(spacing: 6) {
+                                Image(systemName: "photo")
+                                Text("尚未生成预览")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                 }
 
-                if viewModel.isPreviewGenerating {
+                HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
+                    Text("正在生成预览...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                .opacity(viewModel.isPreviewGenerating ? 1 : 0)
 
                 if let previewError = viewModel.previewErrorMessage {
                     Text("预览错误: \(previewError)")
@@ -118,13 +129,24 @@ struct VideoTimelinePreviewPanel: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.secondary.opacity(0.08))
                         .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .overlay(Image(systemName: "film"))
+                        .overlay {
+                            VStack(spacing: 6) {
+                                Image(systemName: "film")
+                                Text("尚未生成预览")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                 }
 
-                if viewModel.isPreviewGenerating {
+                HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
+                    Text("正在生成预览...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                .opacity(viewModel.isPreviewGenerating ? 1 : 0)
 
                 if let previewError = viewModel.previewErrorMessage {
                     Text("预览错误: \(previewError)")

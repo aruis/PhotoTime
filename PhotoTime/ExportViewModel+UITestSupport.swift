@@ -18,7 +18,7 @@ extension ExportViewModel {
                 failedAssetNames: failedAssetNames
             )
             workflow.finishExportFailure(
-                message: "[E_EXPORT_PIPELINE] 测试失败\n建议动作: 重试上次导出\n建议: 测试场景\n日志: /tmp/phototime-ui-failure.render.log"
+                message: "导出失败，请查看下方详情。"
             )
         case "failure_then_success":
             lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-failure.render.log")
@@ -31,7 +31,7 @@ extension ExportViewModel {
                 failedAssetNames: failedAssetNames
             )
             workflow.finishExportFailure(
-                message: "[E_EXPORT_PIPELINE] 测试失败\n建议动作: 重试上次导出\n建议: 测试场景\n日志: /tmp/phototime-ui-failure.render.log"
+                message: "导出失败，请查看下方详情。"
             )
         case "success":
             lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-success.render.log")
@@ -73,6 +73,23 @@ extension ExportViewModel {
         return true
         #else
         return false
+        #endif
+    }
+
+    func simulateExportFailure() {
+        #if DEBUG
+        lastLogURL = URL(fileURLWithPath: "/tmp/phototime-debug-failure.render.log")
+        failedAssetNames = ["simulated-broken.jpg"]
+        recoveryAdvice = RecoveryAdvice(action: .retryExport, message: "这是手动模拟的失败，用于验收测试。可点击重试。")
+        failureCardCopy = ExportStatusMessageBuilder.failureCardCopy(
+            stage: .export,
+            adviceActionTitle: RecoveryAction.retryExport.title,
+            adviceMessage: "这是手动模拟的失败，用于验收测试。可点击重试。",
+            failedAssetNames: failedAssetNames
+        )
+        workflow.finishExportFailure(
+            message: "导出失败，请查看下方详情。"
+        )
         #endif
     }
 

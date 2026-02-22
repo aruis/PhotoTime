@@ -10,7 +10,7 @@ struct WorkflowOverviewPanel: View {
 
     var body: some View {
         GroupBox("流程状态") {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(statusMessage)
                     .font(.callout)
                     .accessibilityIdentifier("workflow_status_message")
@@ -23,7 +23,7 @@ struct WorkflowOverviewPanel: View {
         }
 
         GroupBox("快速开始") {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 ForEach(flowSteps) { step in
                     HStack(spacing: 8) {
                         Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
@@ -54,7 +54,10 @@ struct FailureStatusCard: View {
 
     var body: some View {
         GroupBox("导出失败") {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("建议先执行：\(copy.actionTitle)")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
                 Text("问题是什么")
                     .font(.subheadline.weight(.semibold))
                 Text(copy.problemSummary)
@@ -67,10 +70,12 @@ struct FailureStatusCard: View {
                 HStack(spacing: 10) {
                     Button(copy.actionTitle) { onPrimaryAction() }
                         .accessibilityIdentifier("failure_primary_action")
+                        .buttonStyle(.borderedProminent)
                         .disabled(isBusy)
                     Button("查看日志") { onOpenLog() }
                         .accessibilityIdentifier("failure_open_log")
                 }
+                .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -109,7 +114,9 @@ struct SuccessStatusCard: View {
 
     var body: some View {
         GroupBox("导出成功") {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("已生成可播放的 MP4 文件。")
+                    .font(.callout)
                 if let filename {
                     Text("文件: \(filename)")
                         .font(.callout)
@@ -121,14 +128,16 @@ struct SuccessStatusCard: View {
                         .textSelection(.enabled)
                 }
                 HStack(spacing: 10) {
+                    Button("打开输出目录") { onOpenOutputDirectory() }
+                        .accessibilityIdentifier("success_open_output")
+                        .buttonStyle(.borderedProminent)
+                    Button("查看日志") { onOpenLog() }
+                        .accessibilityIdentifier("success_open_log")
                     Button("再次导出") { onExportAgain() }
                         .accessibilityIdentifier("success_export_again")
                         .disabled(isBusy)
-                    Button("打开输出目录") { onOpenOutputDirectory() }
-                        .accessibilityIdentifier("success_open_output")
-                    Button("查看日志") { onOpenLog() }
-                        .accessibilityIdentifier("success_open_log")
                 }
+                .controlSize(.small)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
