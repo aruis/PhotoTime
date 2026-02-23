@@ -111,6 +111,7 @@ struct ContentView: View {
                         .disabled(viewModel.isBusy)
                     #endif
                 }
+                .accessibilityIdentifier("toolbar_more_menu")
             }
         }
         .onAppear {

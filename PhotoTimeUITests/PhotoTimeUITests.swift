@@ -27,6 +27,10 @@ final class PhotoTimeUITests: XCTestCase {
         return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 
+    private func elementByIdentifier(_ app: XCUIApplication, id: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: id).firstMatch
+    }
+
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
 
@@ -46,14 +50,18 @@ final class PhotoTimeUITests: XCTestCase {
         app.launch()
 
         let selectImages = button(app, id: "primary_select_images", title: "选择图片")
-        let selectOutput = button(app, id: "primary_select_output", title: "选择导出路径")
-        let export = button(app, id: "primary_export", title: "导出 MP4")
-        let cancel = button(app, id: "primary_cancel", title: "取消导出")
+        let export = elementByIdentifier(app, id: "primary_export")
+        let cancel = elementByIdentifier(app, id: "primary_cancel")
+        let moreMenu = elementByIdentifier(app, id: "toolbar_more_menu")
 
         XCTAssertTrue(selectImages.exists)
-        XCTAssertTrue(selectOutput.exists)
-        XCTAssertTrue(export.exists)
-        XCTAssertTrue(cancel.exists)
+        XCTAssertFalse(export.exists)
+        XCTAssertFalse(cancel.exists)
+        XCTAssertTrue(moreMenu.waitForExistence(timeout: uiTimeout))
+
+        moreMenu.tap()
+        let selectOutput = elementByIdentifier(app, id: "primary_select_output")
+        XCTAssertTrue(selectOutput.waitForExistence(timeout: uiTimeout))
         XCTAssertTrue(app.staticTexts["flow_next_hint"].waitForExistence(timeout: uiTimeout))
     }
 
