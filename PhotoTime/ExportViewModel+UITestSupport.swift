@@ -78,7 +78,17 @@ extension ExportViewModel {
 
     func simulateExportFailure() {
         #if DEBUG
-        lastLogURL = URL(fileURLWithPath: "/tmp/phototime-debug-failure.render.log")
+        let debugDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PhotoTime-Debug", isDirectory: true)
+        try? FileManager.default.createDirectory(at: debugDir, withIntermediateDirectories: true)
+        let logURL = debugDir.appendingPathComponent("phototime-debug-failure.render.log")
+        lastLogURL = logURL
+        let debugLog = """
+        [debug] simulated export failure
+        reason: manual trigger for acceptance
+        next_action: retry export
+        """
+        try? debugLog.write(to: logURL, atomically: true, encoding: .utf8)
         failedAssetNames = ["simulated-broken.jpg"]
         recoveryAdvice = RecoveryAdvice(action: .retryExport, message: "这是手动模拟的失败，用于验收测试。可点击重试。")
         failureCardCopy = ExportStatusMessageBuilder.failureCardCopy(

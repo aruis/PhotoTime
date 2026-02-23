@@ -3,7 +3,6 @@ import SwiftUI
 struct WorkflowOverviewPanel: View {
     let statusMessage: String
     let nextActionHint: String
-    let flowSteps: [ExportViewModel.FlowStep]
     let firstRunPrimaryActionTitle: String?
     let isBusy: Bool
     let onFirstRunPrimaryAction: () -> Void
@@ -18,27 +17,13 @@ struct WorkflowOverviewPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("flow_next_hint")
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-
-        GroupBox("快速开始") {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(flowSteps) { step in
-                    HStack(spacing: 8) {
-                        Image(systemName: step.done ? "checkmark.circle.fill" : "circle")
-                            .foregroundStyle(step.done ? .green : .secondary)
-                        Text(step.title)
-                            .font(.caption)
-                            .foregroundStyle(step.done ? .secondary : .primary)
-                    }
-                }
 
                 if let firstRunPrimaryActionTitle {
                     Button(firstRunPrimaryActionTitle) { onFirstRunPrimaryAction() }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(isBusy)
+                        .padding(.top, 2)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,7 +53,7 @@ struct FailureStatusCard: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 10) {
-                    Button(copy.actionTitle) { onPrimaryAction() }
+                    Button("执行：\(copy.actionTitle)") { onPrimaryAction() }
                         .accessibilityIdentifier("failure_primary_action")
                         .buttonStyle(.borderedProminent)
                         .disabled(isBusy)
@@ -109,6 +94,7 @@ struct SuccessStatusCard: View {
     let logPath: String?
     let isBusy: Bool
     let onExportAgain: () -> Void
+    let onOpenOutputFile: () -> Void
     let onOpenOutputDirectory: () -> Void
     let onOpenLog: () -> Void
 
@@ -128,9 +114,11 @@ struct SuccessStatusCard: View {
                         .textSelection(.enabled)
                 }
                 HStack(spacing: 10) {
+                    Button("打开文件") { onOpenOutputFile() }
+                        .accessibilityIdentifier("success_open_file")
+                        .buttonStyle(.borderedProminent)
                     Button("打开输出目录") { onOpenOutputDirectory() }
                         .accessibilityIdentifier("success_open_output")
-                        .buttonStyle(.borderedProminent)
                     Button("查看日志") { onOpenLog() }
                         .accessibilityIdentifier("success_open_log")
                     Button("再次导出") { onExportAgain() }

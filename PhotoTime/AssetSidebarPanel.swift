@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 struct AssetSidebarPanel: View {
     @ObservedObject var viewModel: ExportViewModel
     @Binding var selectedAssetURL: URL?
-    @Binding var assetSearchText: String
     @Binding var isAssetDropTarget: Bool
     @Binding var draggingAssetURL: URL?
 
@@ -45,7 +44,7 @@ struct AssetSidebarPanel: View {
                 viewModel.addImages()
             }
             .buttonStyle(.borderedProminent)
-            Text("支持拖入图片或文件夹；导出路径默认在“影片”目录，可按需修改。")
+            Text("支持拖入图片或文件夹；点击导出时可选择保存路径。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -55,17 +54,7 @@ struct AssetSidebarPanel: View {
     private var assetBottomBar: some View {
         HStack(spacing: 8) {
             if !viewModel.imageURLs.isEmpty {
-                TextField("搜索图片", text: $assetSearchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 180)
-
-                Picker("筛选", selection: $viewModel.fileListFilter) {
-                    ForEach(ExportViewModel.FileListFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
-                    }
-                }
-                .pickerStyle(.menu)
-                .controlSize(.small)
+                filterToggleButtons
             }
 
             Spacer(minLength: 0)
@@ -190,13 +179,7 @@ struct AssetSidebarPanel: View {
     }
 
     private var sidebarFilteredAssets: [URL] {
-        let baseAssets = sidebarBaseAssets
-        guard !assetSearchText.isEmpty else {
-            return baseAssets
-        }
-        return baseAssets.filter { url in
-            url.lastPathComponent.localizedCaseInsensitiveContains(assetSearchText)
-        }
+        sidebarBaseAssets
     }
 
     private var sidebarBaseAssets: [URL] {
@@ -207,7 +190,7 @@ struct AssetSidebarPanel: View {
     }
 
     private var canReorderAssets: Bool {
-        viewModel.fileListFilter == .all && assetSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        viewModel.fileListFilter == .all
     }
 
     private func assetTagLine(fileName: String, issueTags: [String]) -> String {
@@ -219,5 +202,49 @@ struct AssetSidebarPanel: View {
             tags.append("已跳过")
         }
         return tags.joined(separator: " · ")
+    }
+
+    private var filterToggleButtons: some View {
+        HStack(spacing: 4) {
+            filterButton(
+                icon: "line.3.horizontal.decrease.circle",
+                help: "显示全部素材",
+                filter: .all
+            )
+            filterButton(
+                icon: "exclamationmark.triangle",
+                help: "仅显示问题素材",
+                filter: .problematic
+            )
+            filterButton(
+                icon: "xmark.octagon",
+                help: "仅显示必须修复",
+                filter: .mustFix
+            )
+            filterButton(
+                icon: "checkmark.circle",
+                help: "仅显示正常素材",
+                filter: .normal
+            )
+        }
+    }
+
+    private func filterButton(
+        icon: String,
+        help: String,
+        filter: ExportViewModel.FileListFilter
+    ) -> some View {
+        let isActive = viewModel.fileListFilter == filter
+        return Button {
+            viewModel.fileListFilter = filter
+        } label: {
+            Image(systemName: icon)
+                .font(.caption)
+                .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .tint(isActive ? .accentColor : .gray.opacity(0.35))
+        .help(help)
     }
 }

@@ -36,7 +36,6 @@ struct ContentView: View {
     @State private var settingsTab: SettingsTab = .simple
     @State private var selectedAssetURL: URL?
     @State private var singlePreviewDebounceTask: Task<Void, Never>?
-    @State private var assetSearchText = ""
     @State private var isAssetDropTarget = false
     @State private var isAudioDropTarget = false
     @State private var draggingAssetURL: URL?
@@ -52,12 +51,9 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $splitColumnVisibility) {
             sidebarAssetColumn
                 .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
-        } content: {
-            centerPreviewColumn
-                .navigationSplitViewColumnWidth(min: 520, ideal: 680, max: 900)
         } detail: {
-            rightSettingsColumn
-                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 460)
+            workspaceDetailSplit
+                .navigationSplitViewColumnWidth(min: 860, ideal: 1040)
         }
         .navigationSplitViewStyle(.balanced)
         .navigationTitle("PhotoTime")
@@ -117,7 +113,6 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 1200, idealWidth: 1360, minHeight: 720, idealHeight: 860)
         .onAppear {
             applyPreviewModePolicy(for: centerPreviewTab)
             if centerPreviewTab == .singleFrame {
@@ -168,10 +163,18 @@ struct ContentView: View {
         AssetSidebarPanel(
             viewModel: viewModel,
             selectedAssetURL: $selectedAssetURL,
-            assetSearchText: $assetSearchText,
             isAssetDropTarget: $isAssetDropTarget,
             draggingAssetURL: $draggingAssetURL
         )
+    }
+
+    private var workspaceDetailSplit: some View {
+        HSplitView {
+            centerPreviewColumn
+                .frame(minWidth: 520, idealWidth: 680, maxWidth: .infinity)
+            rightSettingsColumn
+                .frame(minWidth: 300, idealWidth: 360, maxWidth: 460)
+        }
     }
 
     private var centerPreviewColumn: some View {
@@ -264,33 +267,49 @@ struct ContentView: View {
     }
 
     private var outputDestinationPanel: some View {
-        GroupBox("导出位置") {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Label("导出位置", systemImage: "folder")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if let outputURL = viewModel.outputURL {
                     Text(outputURL.lastPathComponent)
                         .font(.callout)
-                    Text(outputURL.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-
-                    HStack(spacing: 10) {
-                        Button("修改路径") { viewModel.chooseOutput() }
-                            .disabled(!viewModel.actionAvailability.canSelectOutput)
-                        Button("打开目录") { viewModel.openLatestOutputDirectory() }
-                    }
-                    .controlSize(.small)
+                        .lineLimit(1)
                 } else {
-                    Text("尚未设置导出文件路径。")
-                        .font(.caption)
+                    Text("未设置")
+                        .font(.callout)
                         .foregroundStyle(.secondary)
-                    Button("现在选择导出路径") { viewModel.chooseOutput() }
+                }
+
+                Spacer(minLength: 0)
+
+                Button("修改路径") { viewModel.chooseOutput() }
+                    .controlSize(.small)
+                    .disabled(!viewModel.actionAvailability.canSelectOutput)
+
+                if viewModel.outputURL != nil {
+                    Button("打开目录") { viewModel.openLatestOutputDirectory() }
                         .controlSize(.small)
-                        .disabled(!viewModel.actionAvailability.canSelectOutput)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let outputURL = viewModel.outputURL {
+                Text(outputURL.path)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("导出前请先选择可写路径。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var emptyPreviewPanel: some View {
@@ -321,7 +340,6 @@ struct ContentView: View {
             WorkflowOverviewPanel(
                 statusMessage: viewModel.statusMessage,
                 nextActionHint: viewModel.nextActionHint,
-                flowSteps: viewModel.flowSteps,
                 firstRunPrimaryActionTitle: firstRunPrimaryAction?.title,
                 isBusy: viewModel.isBusy,
                 onFirstRunPrimaryAction: { firstRunPrimaryAction?.handler() }
@@ -347,6 +365,7 @@ struct ContentView: View {
                     logPath: viewModel.latestLogPath,
                     isBusy: viewModel.isBusy,
                     onExportAgain: { viewModel.export() },
+                    onOpenOutputFile: { viewModel.openLatestOutputFile() },
                     onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
                     onOpenLog: { viewModel.openLatestLog() }
                 )
@@ -367,9 +386,6 @@ struct ContentView: View {
         }
         if viewModel.validationMessage != nil {
             return nil
-        }
-        if !viewModel.hasOutputPath {
-            return ("现在选择导出路径", { viewModel.chooseOutput() })
         }
         if !viewModel.hasSuccessCard {
             return ("现在导出 MP4", { viewModel.export() })

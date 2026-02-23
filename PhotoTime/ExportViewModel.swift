@@ -219,15 +219,14 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     var canRunExport: Bool {
-        actionAvailability.canStartExport && hasSelectedImages && hasOutputPath && validationMessage == nil
+        actionAvailability.canStartExport && hasSelectedImages && validationMessage == nil
     }
 
     var flowSteps: [FlowStep] {
         [
             FlowStep(id: "select-images", title: "选择图片", done: hasSelectedImages),
             FlowStep(id: "preview", title: "（可选）生成预览", done: hasPreviewFrame || hasSelectedImages),
-            FlowStep(id: "select-output", title: "确认导出路径（可修改）", done: hasOutputPath),
-            FlowStep(id: "export", title: "导出 MP4", done: hasSuccessCard)
+            FlowStep(id: "export", title: "导出 MP4（必要时选择路径）", done: hasSuccessCard)
         ]
     }
 
@@ -250,9 +249,6 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
         }
         if !hasPreviewFrame {
             return "可选：点击“生成预览”确认画面；也可直接导出 MP4。"
-        }
-        if !hasOutputPath {
-            return "下一步：点击顶部“选择导出路径”设置输出文件。"
         }
         if isExporting {
             return "正在导出，请等待完成。"

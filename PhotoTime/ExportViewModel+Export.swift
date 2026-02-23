@@ -85,11 +85,18 @@ extension ExportViewModel {
             workflow.setIdleMessage("请先选择图片")
             return
         }
-        guard let outputURL else {
-            workflow.setIdleMessage("请先选择导出路径")
-            return
+        let initialOutputURL: URL
+        if let currentOutputURL = outputURL {
+            initialOutputURL = currentOutputURL
+        } else {
+            chooseOutput()
+            guard let selectedOutputURL = outputURL else {
+                workflow.setIdleMessage("已取消选择导出路径。")
+                return
+            }
+            initialOutputURL = selectedOutputURL
         }
-        guard let outputURL = resolveOutputURLForExport(original: outputURL) else { return }
+        guard let outputURL = resolveOutputURLForExport(original: initialOutputURL) else { return }
 
         config.clampToSafeRange()
         guard isSettingsValid else {
@@ -509,6 +516,17 @@ extension ExportViewModel {
             return
         }
         if !FileManager.default.fileExists(atPath: url.path) {
+            #if DEBUG
+            if url.lastPathComponent == "phototime-debug-failure.render.log" {
+                let fallback = """
+                [debug] simulated export failure
+                hint: log was regenerated on demand
+                """
+                try? fallback.write(to: url, atomically: true, encoding: .utf8)
+            }
+            #endif
+        }
+        if !FileManager.default.fileExists(atPath: url.path) {
             workflow.setIdleMessage("日志文件不存在: \(url.path)")
             return
         }
@@ -521,7 +539,25 @@ extension ExportViewModel {
             workflow.setIdleMessage("暂无可打开的输出目录")
             return
         }
-        NSWorkspace.shared.open(url.deletingLastPathComponent())
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+        if !NSWorkspace.shared.open(url.deletingLastPathComponent()) {
+            workflow.setIdleMessage("无法打开输出目录，请在 Finder 手动定位：\(url.path)")
+        }
+    }
+
+    func openLatestOutputFile() {
+        let targetURL = lastSuccessfulOutputURL ?? outputURL
+        guard let url = targetURL else {
+            workflow.setIdleMessage("暂无可打开的输出文件")
+            return
+        }
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            workflow.setIdleMessage("输出文件不存在: \(url.path)")
+            return
+        }
+        if !NSWorkspace.shared.open(url) {
+            workflow.setIdleMessage("无法打开输出文件，请在 Finder 手动定位：\(url.path)")
+        }
     }
 
     var isSettingsValid: Bool {

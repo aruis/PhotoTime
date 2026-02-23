@@ -12,7 +12,7 @@ enum ExportWorkflowState: String, Sendable {
 struct ExportWorkflowModel: Sendable {
     private(set) var state: ExportWorkflowState = .idle
     private(set) var progress: Double = 0
-    private(set) var statusMessage: String = "请选择图片并设置导出路径"
+    private(set) var statusMessage: String = "请选择图片，导出时可设置保存路径"
 
     var isBusy: Bool {
         switch state {

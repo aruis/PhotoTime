@@ -16,12 +16,13 @@ struct ExportViewModelPreflightFlowTests {
     }
 
     @Test
-    func flowStepMarksOutputReadyWhenDefaultPathExists() async throws {
+    func flowStepMarksExportStepPendingBeforeSuccess() async throws {
         let viewModel = ExportViewModel()
-        let outputStep = viewModel.flowSteps.first { $0.id == "select-output" }
+        let exportStep = viewModel.flowSteps.first { $0.id == "export" }
 
-        #expect(outputStep != nil)
-        #expect(outputStep?.done == true)
+        #expect(exportStep != nil)
+        #expect(exportStep?.title.contains("必要时选择路径") == true)
+        #expect(exportStep?.done == false)
     }
 
     @Test
