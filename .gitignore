@@ -12,3 +12,7 @@ xcuserdata/
 
 # macOS Finder metadata
 .DS_Store
+
+# IDE/editor metadata
+.idea/
+*.swp
