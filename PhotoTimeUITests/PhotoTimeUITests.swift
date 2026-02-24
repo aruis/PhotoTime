@@ -49,12 +49,12 @@ final class PhotoTimeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        let selectImages = button(app, id: "primary_select_images", title: "选择图片")
+        let selectImages = elementByIdentifier(app, id: "primary_select_images")
         let export = elementByIdentifier(app, id: "primary_export")
         let cancel = elementByIdentifier(app, id: "primary_cancel")
         let moreMenu = elementByIdentifier(app, id: "toolbar_more_menu")
 
-        XCTAssertTrue(selectImages.exists)
+        XCTAssertFalse(selectImages.exists)
         XCTAssertFalse(export.exists)
         XCTAssertFalse(cancel.exists)
         XCTAssertTrue(moreMenu.waitForExistence(timeout: uiTimeout))
@@ -62,7 +62,7 @@ final class PhotoTimeUITests: XCTestCase {
         moreMenu.tap()
         let selectOutput = elementByIdentifier(app, id: "primary_select_output")
         XCTAssertTrue(selectOutput.waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.staticTexts["flow_next_hint"].waitForExistence(timeout: uiTimeout))
+        XCTAssertFalse(app.staticTexts["flow_next_hint"].exists)
     }
 
     @MainActor

@@ -242,7 +242,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     var nextActionHint: String {
         if !hasSelectedImages {
-            return "下一步：点击顶部“选择图片”或直接拖入素材。"
+            return "下一步：点击左侧“导入图片”或直接拖入素材。"
         }
         if validationMessage != nil {
             return "下一步：先修正参数校验错误，再继续。"

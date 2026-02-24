@@ -46,6 +46,7 @@ struct ContentView: View {
     @State private var preflightPrioritizeMustFix = true
     @State private var preflightSecondaryActionsExpanded = false
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
+    @State private var showsPreviewModePicker = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $splitColumnVisibility) {
@@ -59,9 +60,6 @@ struct ContentView: View {
         .navigationTitle("PhotoTime")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button("选择图片") { viewModel.chooseImages() }
-                    .accessibilityIdentifier("primary_select_images")
-                    .disabled(!viewModel.actionAvailability.canSelectImages)
                 if viewModel.hasSelectedImages {
                     Button("导出 MP4") { viewModel.export() }
                         .accessibilityIdentifier("primary_export")
@@ -79,37 +77,39 @@ struct ContentView: View {
                     Button("选择导出路径") { viewModel.chooseOutput() }
                         .accessibilityIdentifier("primary_select_output")
                         .disabled(!viewModel.actionAvailability.canSelectOutput)
-                    Button("生成预览") {
-                        if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
-                            viewModel.generatePreviewForSelectedAsset(selected)
-                        } else {
-                            viewModel.generatePreview()
+                    if viewModel.hasSelectedImages {
+                        Button("生成预览") {
+                            if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
+                                viewModel.generatePreviewForSelectedAsset(selected)
+                            } else {
+                                viewModel.generatePreview()
+                            }
                         }
+                            .accessibilityIdentifier("secondary_preview")
+                            .disabled(!viewModel.canRunPreview)
+                        Button("运行预检") { viewModel.rerunPreflight() }
+                            .accessibilityIdentifier("secondary_rerun_preflight")
+                            .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                        Divider()
+                        Button("导入模板") { viewModel.importTemplate() }
+                            .accessibilityIdentifier("secondary_import_template")
+                            .disabled(!viewModel.actionAvailability.canImportTemplate)
+                        Button("保存模板") { viewModel.exportTemplate() }
+                            .accessibilityIdentifier("secondary_export_template")
+                            .disabled(!viewModel.actionAvailability.canSaveTemplate)
+                        Button("重试上次导出") { viewModel.retryLastExport() }
+                            .accessibilityIdentifier("secondary_retry_export")
+                            .disabled(!viewModel.actionAvailability.canRetryExport)
+                        Divider()
+                        Button("导出排障包") { viewModel.exportDiagnosticsBundle() }
+                            .accessibilityIdentifier("secondary_export_diagnostics")
+                            .disabled(viewModel.isBusy)
+                        #if DEBUG
+                        Divider()
+                        Button("模拟导出失败") { viewModel.simulateExportFailure() }
+                            .disabled(viewModel.isBusy)
+                        #endif
                     }
-                        .accessibilityIdentifier("secondary_preview")
-                        .disabled(!viewModel.canRunPreview)
-                    Button("运行预检") { viewModel.rerunPreflight() }
-                        .accessibilityIdentifier("secondary_rerun_preflight")
-                        .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
-                    Divider()
-                    Button("导入模板") { viewModel.importTemplate() }
-                        .accessibilityIdentifier("secondary_import_template")
-                        .disabled(!viewModel.actionAvailability.canImportTemplate)
-                    Button("保存模板") { viewModel.exportTemplate() }
-                        .accessibilityIdentifier("secondary_export_template")
-                        .disabled(!viewModel.actionAvailability.canSaveTemplate)
-                    Button("重试上次导出") { viewModel.retryLastExport() }
-                        .accessibilityIdentifier("secondary_retry_export")
-                        .disabled(!viewModel.actionAvailability.canRetryExport)
-                    Divider()
-                    Button("导出排障包") { viewModel.exportDiagnosticsBundle() }
-                        .accessibilityIdentifier("secondary_export_diagnostics")
-                        .disabled(viewModel.isBusy)
-                    #if DEBUG
-                    Divider()
-                    Button("模拟导出失败") { viewModel.simulateExportFailure() }
-                        .disabled(viewModel.isBusy)
-                    #endif
                 }
                 .accessibilityIdentifier("toolbar_more_menu")
             }
@@ -129,6 +129,7 @@ struct ContentView: View {
         .onChange(of: viewModel.imageURLs) { _, urls in
             guard !urls.isEmpty else {
                 selectedAssetURL = nil
+                showsPreviewModePicker = false
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
                 }
@@ -148,6 +149,9 @@ struct ContentView: View {
             }
         }
         .onChange(of: centerPreviewTab) { _, tab in
+            if tab == .videoTimeline {
+                showsPreviewModePicker = true
+            }
             applyPreviewModePolicy(for: tab)
             if tab == .singleFrame {
                 scheduleSingleFramePreview()
@@ -189,12 +193,25 @@ struct ContentView: View {
                 }
 
                 if viewModel.hasSelectedImages {
-                    Picker("预览模式", selection: $centerPreviewTab) {
-                        ForEach(CenterPreviewTab.allCases) { tab in
-                            Text(tab.title).tag(tab)
+                    if showsPreviewModePicker {
+                        Picker("预览模式", selection: $centerPreviewTab) {
+                            ForEach(CenterPreviewTab.allCases) { tab in
+                                Text(tab.title).tag(tab)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    } else {
+                        HStack(spacing: 8) {
+                            Text("当前为单帧预览")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                            Button("切换预览模式") {
+                                showsPreviewModePicker = true
+                            }
+                            .controlSize(.small)
                         }
                     }
-                    .pickerStyle(.segmented)
 
                     if centerPreviewTab == .singleFrame {
                         previewPanel
@@ -245,8 +262,13 @@ struct ContentView: View {
 
     private var workflowPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            exportStatusPanel
-            outputDestinationPanel
+            if viewModel.hasSelectedImages || viewModel.hasFailureCard || viewModel.hasSuccessCard {
+                exportStatusPanel
+            }
+
+            if viewModel.hasSelectedImages, viewModel.outputURL == nil {
+                outputPathHintPanel
+            }
 
             if let report = viewModel.preflightReport, !report.issues.isEmpty {
                 PreflightPanel(
@@ -267,46 +289,17 @@ struct ContentView: View {
         .textSelection(.enabled)
     }
 
-    private var outputDestinationPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Label("导出位置", systemImage: "folder")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let outputURL = viewModel.outputURL {
-                    Text(outputURL.lastPathComponent)
-                        .font(.callout)
-                        .lineLimit(1)
-                } else {
-                    Text("未设置")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer(minLength: 0)
-
-                Button("修改路径") { viewModel.chooseOutput() }
-                    .controlSize(.small)
-                    .disabled(!viewModel.actionAvailability.canSelectOutput)
-
-                if viewModel.outputURL != nil {
-                    Button("打开目录") { viewModel.openLatestOutputDirectory() }
-                        .controlSize(.small)
-                }
-            }
-
-            if let outputURL = viewModel.outputURL {
-                Text(outputURL.path)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            } else {
-                Text("导出前请先选择可写路径。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
+    private var outputPathHintPanel: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle")
+                .foregroundStyle(.secondary)
+            Text("导出前请先选择导出路径。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            Button("选择导出路径") { viewModel.chooseOutput() }
+                .controlSize(.small)
+                .disabled(!viewModel.actionAvailability.canSelectOutput)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -314,26 +307,31 @@ struct ContentView: View {
     }
 
     private var emptyPreviewPanel: some View {
-        GroupBox("预览") {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("先选择图片后可生成预览", systemImage: "photo.on.rectangle.angled")
-                    .font(.callout)
-                Text("支持拖入图片或文件夹；导出前建议先看一眼单帧或视频预览。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    Button("选择图片") { viewModel.chooseImages() }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(!viewModel.actionAvailability.canSelectImages)
-                    Button("设置导出路径") { viewModel.chooseOutput() }
-                        .controlSize(.small)
-                        .disabled(!viewModel.actionAvailability.canSelectOutput)
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.05))
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 1)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.left.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Color.accentColor)
+                        Text("先看左侧，点击“导入图片”")
+                            .font(.headline)
+                    }
+                    Text("导入后这里会显示预览与导出信息。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
         }
+        .frame(minHeight: 300)
     }
 
     private var exportStatusPanel: some View {
@@ -383,16 +381,16 @@ struct ContentView: View {
 
     private var firstRunPrimaryAction: (title: String, handler: () -> Void)? {
         if !viewModel.hasSelectedImages {
-            return ("现在选择图片", { viewModel.chooseImages() })
+            return ("导入图片", { viewModel.chooseImages() })
         }
         if viewModel.validationMessage != nil {
             return nil
         }
         if !viewModel.hasSuccessCard {
-            return ("现在导出 MP4", { viewModel.export() })
+            return ("导出 MP4", { viewModel.export() })
         }
         if !viewModel.hasPreviewFrame {
-            return ("现在生成预览", {
+            return ("可选：生成预览", {
                 if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
                     viewModel.generatePreviewForSelectedAsset(selected)
                 } else {
