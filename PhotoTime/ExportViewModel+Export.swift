@@ -540,9 +540,6 @@ extension ExportViewModel {
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting([url])
-        if !NSWorkspace.shared.open(url.deletingLastPathComponent()) {
-            workflow.setIdleMessage("无法打开输出目录，请在 Finder 手动定位：\(url.path)")
-        }
     }
 
     func openLatestOutputFile() {

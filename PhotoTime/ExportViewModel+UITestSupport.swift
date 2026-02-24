@@ -9,6 +9,13 @@ extension ExportViewModel {
         switch scenario {
         case "failure":
             lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-failure.render.log")
+            ensureLogFileExistsIfNeeded(
+                at: lastLogURL,
+                content: """
+                [ui-test] failure scenario
+                hint: retry export
+                """
+            )
             failedAssetNames = ["broken-sample.jpg"]
             recoveryAdvice = RecoveryAdvice(action: .retryExport, message: "测试场景：可直接重试导出。")
             failureCardCopy = ExportStatusMessageBuilder.failureCardCopy(
@@ -22,6 +29,13 @@ extension ExportViewModel {
             )
         case "failure_then_success":
             lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-failure.render.log")
+            ensureLogFileExistsIfNeeded(
+                at: lastLogURL,
+                content: """
+                [ui-test] failure then success scenario
+                hint: retry export
+                """
+            )
             failedAssetNames = ["broken-sample.jpg"]
             recoveryAdvice = RecoveryAdvice(action: .retryExport, message: "测试场景：修复后可重试。")
             failureCardCopy = ExportStatusMessageBuilder.failureCardCopy(
@@ -35,6 +49,12 @@ extension ExportViewModel {
             )
         case "success":
             lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-success.render.log")
+            ensureLogFileExistsIfNeeded(
+                at: lastLogURL,
+                content: """
+                [ui-test] success scenario
+                """
+            )
             lastSuccessfulOutputURL = URL(fileURLWithPath: "/tmp/PhotoTime-UI-Success.mp4")
             recoveryAdvice = nil
             failureCardCopy = nil
@@ -64,6 +84,12 @@ extension ExportViewModel {
         #if DEBUG
         guard isUITestScenario(named: "failure_then_success") else { return false }
         lastLogURL = URL(fileURLWithPath: "/tmp/phototime-ui-recovered.render.log")
+        ensureLogFileExistsIfNeeded(
+            at: lastLogURL,
+            content: """
+            [ui-test] recovered scenario
+            """
+        )
         lastSuccessfulOutputURL = URL(fileURLWithPath: "/tmp/PhotoTime-UI-Recovered.mp4")
         recoveryAdvice = nil
         failureCardCopy = nil
@@ -120,6 +146,16 @@ extension ExportViewModel {
         return arguments[flagIndex + 1]
         #else
         return nil
+        #endif
+    }
+
+    private func ensureLogFileExistsIfNeeded(at url: URL?, content: String) {
+        #if DEBUG
+        guard let url else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? content.write(to: url, atomically: true, encoding: .utf8)
+        }
         #endif
     }
 }
