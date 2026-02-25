@@ -7,6 +7,8 @@ struct AssetSidebarPanel: View {
     @Binding var selectedAssetURL: URL?
     @Binding var isAssetDropTarget: Bool
     @Binding var draggingAssetURL: URL?
+    private let thumbnailHeight: CGFloat = 72
+    private let cardHeight: CGFloat = 104
 
     var body: some View {
         ZStack {
@@ -36,7 +38,7 @@ struct AssetSidebarPanel: View {
     }
 
     private var emptyAssetDropView: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             Image(systemName: "photo.stack")
                 .font(.system(size: 28))
                 .foregroundStyle(.secondary)
@@ -44,11 +46,16 @@ struct AssetSidebarPanel: View {
                 viewModel.addImages()
             }
             .buttonStyle(.borderedProminent)
-            Text("支持拖入图片或文件夹；点击导出时可选择保存路径。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(spacing: 4) {
+                Text("支持拖入图片或文件夹")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 18)
     }
 
     private var assetBottomBar: some View {
@@ -93,7 +100,7 @@ struct AssetSidebarPanel: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .topTrailing) {
-                AssetThumbnailView(url: url, height: 72)
+                AssetThumbnailView(url: url, height: thumbnailHeight)
 
                 if !tags.isEmpty || viewModel.failedAssetNames.contains(fileName) {
                     Circle()
@@ -102,10 +109,14 @@ struct AssetSidebarPanel: View {
                         .padding(6)
                 }
             }
+            .frame(maxWidth: .infinity, minHeight: thumbnailHeight, maxHeight: thumbnailHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .clipped()
 
             Text(fileName)
                 .font(.caption2)
                 .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(6)
         .background(
@@ -117,6 +128,9 @@ struct AssetSidebarPanel: View {
                 .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.18), lineWidth: isSelected ? 1.5 : 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
+        .frame(height: cardHeight, alignment: .top)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipped()
         .onTapGesture {
             selectedAssetURL = url
         }

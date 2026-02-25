@@ -46,7 +46,6 @@ struct ContentView: View {
     @State private var preflightPrioritizeMustFix = true
     @State private var preflightSecondaryActionsExpanded = false
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
-    @State private var showsPreviewModePicker = false
 
     var body: some View {
         NavigationSplitView(columnVisibility: $splitColumnVisibility) {
@@ -129,7 +128,6 @@ struct ContentView: View {
         .onChange(of: viewModel.imageURLs) { _, urls in
             guard !urls.isEmpty else {
                 selectedAssetURL = nil
-                showsPreviewModePicker = false
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
                 }
@@ -149,9 +147,6 @@ struct ContentView: View {
             }
         }
         .onChange(of: centerPreviewTab) { _, tab in
-            if tab == .videoTimeline {
-                showsPreviewModePicker = true
-            }
             applyPreviewModePolicy(for: tab)
             if tab == .singleFrame {
                 scheduleSingleFramePreview()
@@ -183,49 +178,54 @@ struct ContentView: View {
     }
 
     private var centerPreviewColumn: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if let validationMessage = viewModel.validationMessage {
-                    Text("参数校验: \(validationMessage)")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("settings_validation_message")
-                }
-
-                if viewModel.hasSelectedImages {
-                    if showsPreviewModePicker {
-                        Picker("预览模式", selection: $centerPreviewTab) {
-                            ForEach(CenterPreviewTab.allCases) { tab in
-                                Text(tab.title).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                    } else {
-                        HStack(spacing: 8) {
-                            Text("当前为单帧预览")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer(minLength: 0)
-                            Button("切换预览模式") {
-                                showsPreviewModePicker = true
-                            }
-                            .controlSize(.small)
-                        }
+        Group {
+            if shouldUseFullHeightEmptyState {
+                VStack(alignment: .leading, spacing: 14) {
+                    if let validationMessage = viewModel.validationMessage {
+                        Text("参数校验: \(validationMessage)")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .accessibilityIdentifier("settings_validation_message")
                     }
 
-                    if centerPreviewTab == .singleFrame {
-                        previewPanel
-                    } else {
-                        videoPreviewPanel
-                    }
-                } else {
                     emptyPreviewPanel
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if let validationMessage = viewModel.validationMessage {
+                            Text("参数校验: \(validationMessage)")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .accessibilityIdentifier("settings_validation_message")
+                        }
 
-                workflowPanel
+                        if viewModel.hasSelectedImages {
+                            Picker("预览模式", selection: $centerPreviewTab) {
+                                ForEach(CenterPreviewTab.allCases) { tab in
+                                    Text(tab.title).tag(tab)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            if centerPreviewTab == .singleFrame {
+                                previewPanel
+                            } else {
+                                videoPreviewPanel
+                            }
+                        } else {
+                            emptyPreviewPanel
+                        }
+
+                        workflowPanel
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -313,25 +313,27 @@ struct ContentView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 1)
 
-            HStack {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "arrow.left.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundStyle(Color.accentColor)
-                        Text("先看左侧，点击“导入图片”")
-                            .font(.headline)
-                    }
-                    Text("导入后这里会显示预览与导出信息。")
-                        .font(.caption)
+            VStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.left")
+                        .font(.headline)
                         .foregroundStyle(.secondary)
+                    Text("从左侧开始，先导入图片")
+                        .font(.headline)
                 }
-                Spacer(minLength: 0)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.secondary.opacity(0.08), in: Capsule())
+
+                Text("导入后，这里会显示预览与导出状态。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            .multilineTextAlignment(.center)
+            .padding(24)
         }
-        .frame(minHeight: 300)
+        .frame(minHeight: 320)
     }
 
     private var exportStatusPanel: some View {
@@ -458,6 +460,13 @@ struct ContentView: View {
             return selectedAssetURL
         }
         return viewModel.imageURLs.first
+    }
+
+    private var shouldUseFullHeightEmptyState: Bool {
+        !viewModel.hasSelectedImages
+            && !viewModel.hasFailureCard
+            && !viewModel.hasSuccessCard
+            && (viewModel.preflightReport?.issues.isEmpty ?? true)
     }
 
     private func scheduleSingleFramePreview() {

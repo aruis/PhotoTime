@@ -4,7 +4,7 @@ struct SingleFramePreviewPanel: View {
     @ObservedObject var viewModel: ExportViewModel
 
     var body: some View {
-        GroupBox("单张预览") {
+        GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 if let preview = viewModel.previewImage {
                     Image(nsImage: preview)
@@ -26,14 +26,12 @@ struct SingleFramePreviewPanel: View {
                         }
                 }
 
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("正在生成预览...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if viewModel.isPreviewGenerating {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
-                .opacity(viewModel.isPreviewGenerating ? 1 : 0)
 
                 if let previewError = viewModel.previewErrorMessage {
                     Text("预览错误: \(previewError)")
@@ -50,21 +48,8 @@ struct VideoTimelinePreviewPanel: View {
     let audioSegments: [(start: Double, end: Double)]
 
     var body: some View {
-        GroupBox("视频预览") {
+        GroupBox {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    Text("时间: \(viewModel.previewSecond, specifier: "%.2f")s")
-                    Slider(
-                        value: $viewModel.previewSecond,
-                        in: 0...max(viewModel.previewMaxSecond, 0.001)
-                    )
-                    .onChange(of: viewModel.previewSecond) { _, _ in
-                        viewModel.schedulePreviewRegeneration()
-                        viewModel.syncAudioPreviewPosition()
-                    }
-                    .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
-                }
-
                 if viewModel.config.audioEnabled {
                     VStack(alignment: .leading, spacing: 6) {
                         let videoDuration = max(viewModel.previewMaxSecond, 0)
@@ -139,14 +124,29 @@ struct VideoTimelinePreviewPanel: View {
                         }
                 }
 
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("正在生成预览...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        Text("时间: \(viewModel.previewSecond, specifier: "%.2f")s")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Slider(
+                            value: $viewModel.previewSecond,
+                            in: 0...max(viewModel.previewMaxSecond, 0.001)
+                        )
+                        .onChange(of: viewModel.previewSecond) { _, _ in
+                            viewModel.schedulePreviewRegeneration()
+                            viewModel.syncAudioPreviewPosition()
+                        }
+                        .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                    }
+
+                    if viewModel.isPreviewGenerating {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
                 }
-                .opacity(viewModel.isPreviewGenerating ? 1 : 0)
 
                 if let previewError = viewModel.previewErrorMessage {
                     Text("预览错误: \(previewError)")
