@@ -80,6 +80,43 @@ extension ExportViewModel {
         }
     }
 
+    func removeImages(_ urls: [URL]) {
+        guard !isBusy else { return }
+        let targets = Set(urls)
+        guard !targets.isEmpty else { return }
+
+        let remaining = imageURLs.filter { !targets.contains($0) }
+        guard remaining.count != imageURLs.count else { return }
+
+        imageURLs = remaining
+        let removedNames = Set(urls.map(\.lastPathComponent))
+        failedAssetNames.removeAll(where: { removedNames.contains($0) })
+        skippedAssetNamesFromPreflight.removeAll(where: { removedNames.contains($0) })
+        preflightReport = nil
+        ignoredPreflightIssueKeys = []
+        preflightIssueFilter = .all
+        pendingRequestFromPreflight = nil
+
+        if imageURLs.isEmpty {
+            previewImage = nil
+            previewSecond = 0
+            previewStatusMessage = "未生成预览"
+            previewErrorMessage = nil
+            workflow.setIdleMessage("素材已清空")
+            return
+        }
+
+        previewImage = nil
+        previewSecond = min(previewSecond, previewMaxSecond)
+        previewStatusMessage = "素材已更新，请生成预览"
+        previewErrorMessage = nil
+        workflow.setIdleMessage("已删除 \(removedNames.count) 张素材")
+
+        if isSettingsValid {
+            generatePreview()
+        }
+    }
+
     func reorderImage(from source: URL, to target: URL) {
         guard !isBusy else { return }
         guard source != target else { return }

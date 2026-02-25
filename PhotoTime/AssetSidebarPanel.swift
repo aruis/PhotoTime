@@ -5,8 +5,10 @@ import UniformTypeIdentifiers
 struct AssetSidebarPanel: View {
     @ObservedObject var viewModel: ExportViewModel
     @Binding var selectedAssetURL: URL?
+    @Binding var selectedAssetURLs: Set<URL>
     @Binding var isAssetDropTarget: Bool
     @Binding var draggingAssetURL: URL?
+    @State private var localKeyMonitor: Any?
     private let thumbnailHeight: CGFloat = 72
     private let cardHeight: CGFloat = 104
 
@@ -32,6 +34,8 @@ struct AssetSidebarPanel: View {
         .animation(.easeInOut(duration: 0.12), value: isAssetDropTarget)
         .onDrop(of: [UTType.fileURL], isTargeted: $isAssetDropTarget, perform: handleAssetDrop(providers:))
         .onDeleteCommand(perform: deleteSelectedAsset)
+        .onAppear(perform: installKeyMonitor)
+        .onDisappear(perform: removeKeyMonitor)
         .safeAreaInset(edge: .bottom) {
             assetBottomBar
         }
@@ -70,6 +74,12 @@ struct AssetSidebarPanel: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
+            if !selectedAssetURLs.isEmpty {
+                Text("· 已选 \(selectedAssetURLs.count)")
+                    .font(.caption2)
+                    .foregroundStyle(Color.accentColor)
+            }
+
             if viewModel.problematicAssetNameSet.count > 0 {
                 Text("· \(viewModel.problematicAssetNameSet.count) 个问题")
                     .font(.caption2)
@@ -96,7 +106,7 @@ struct AssetSidebarPanel: View {
     private func assetThumbnailItem(url: URL) -> some View {
         let fileName = url.lastPathComponent
         let tags = viewModel.preflightIssueTags(for: fileName)
-        let isSelected = selectedAssetURL == url
+        let isSelected = selectedAssetURLs.contains(url)
 
         return VStack(alignment: .leading, spacing: 4) {
             ZStack(alignment: .topTrailing) {
@@ -132,14 +142,12 @@ struct AssetSidebarPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .clipped()
         .onTapGesture {
-            selectedAssetURL = url
+            handleAssetTap(url)
         }
         .contextMenu {
             Button("删除") {
-                viewModel.removeImage(url)
-                if selectedAssetURL == url {
-                    selectedAssetURL = sidebarFilteredAssets.first
-                }
+                selectedAssetURLs = [url]
+                deleteSelectedAsset()
             }
         }
         .onDrag {
@@ -155,15 +163,18 @@ struct AssetSidebarPanel: View {
             ) { source, target in
                 viewModel.reorderImage(from: source, to: target)
                 selectedAssetURL = source
+                selectedAssetURLs = [source]
             }
         )
         .help(assetTagLine(fileName: fileName, issueTags: tags))
     }
 
     private func deleteSelectedAsset() {
-        guard let selectedAssetURL else { return }
-        viewModel.removeImage(selectedAssetURL)
-        self.selectedAssetURL = sidebarFilteredAssets.first
+        let targets = selectedAssetURLs.isEmpty ? Set(selectedAssetURL.map { [$0] } ?? []) : selectedAssetURLs
+        guard !targets.isEmpty else { return }
+        viewModel.removeImages(Array(targets))
+        selectedAssetURLs = []
+        selectedAssetURL = sidebarFilteredAssets.first
     }
 
     private func handleAssetDrop(providers: [NSItemProvider]) -> Bool {
@@ -204,7 +215,7 @@ struct AssetSidebarPanel: View {
     }
 
     private var canReorderAssets: Bool {
-        viewModel.fileListFilter == .all
+        viewModel.fileListFilter == .all && selectedAssetURLs.count <= 1
     }
 
     private func assetTagLine(fileName: String, issueTags: [String]) -> String {
@@ -260,5 +271,66 @@ struct AssetSidebarPanel: View {
         .controlSize(.small)
         .tint(isActive ? .accentColor : .gray.opacity(0.35))
         .help(help)
+    }
+
+    private func handleAssetTap(_ url: URL) {
+        if NSEvent.modifierFlags.contains(.command) {
+            if selectedAssetURLs.contains(url) {
+                selectedAssetURLs.remove(url)
+                if selectedAssetURL == url {
+                    selectedAssetURL = selectedAssetURLs.first
+                }
+            } else {
+                selectedAssetURLs.insert(url)
+                selectedAssetURL = url
+            }
+            return
+        }
+        selectedAssetURLs = [url]
+        selectedAssetURL = url
+    }
+
+    private func selectAllVisibleAssets() {
+        guard !sidebarFilteredAssets.isEmpty else { return }
+        selectedAssetURLs = Set(sidebarFilteredAssets)
+        selectedAssetURL = sidebarFilteredAssets.first
+    }
+
+    private func installKeyMonitor() {
+        guard localKeyMonitor == nil else { return }
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+            handleKeyDown(event)
+        }
+    }
+
+    private func removeKeyMonitor() {
+        guard let localKeyMonitor else { return }
+        NSEvent.removeMonitor(localKeyMonitor)
+        self.localKeyMonitor = nil
+    }
+
+    private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        guard shouldHandleGlobalShortcut else { return event }
+
+        let characters = event.charactersIgnoringModifiers ?? ""
+        let commandPressed = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
+        let isDeleteKey = event.keyCode == 51 || event.keyCode == 117 || characters == "\u{8}"
+
+        if commandPressed, characters.lowercased() == "a" {
+            selectAllVisibleAssets()
+            return nil
+        }
+
+        if !commandPressed, isDeleteKey {
+            deleteSelectedAsset()
+            return nil
+        }
+
+        return event
+    }
+
+    private var shouldHandleGlobalShortcut: Bool {
+        guard let responder = NSApp.keyWindow?.firstResponder else { return true }
+        return !(responder is NSTextView)
     }
 }

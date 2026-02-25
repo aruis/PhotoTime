@@ -123,7 +123,8 @@ final class PhotoTimeUITests: XCTestCase {
         let export = button(app, id: "primary_export", title: "导出 MP4")
 
         XCTAssertTrue(export.exists)
-        XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(waitEnabled(export))
+        XCTAssertFalse(app.staticTexts["workflow_status_message"].exists)
     }
 
     @MainActor

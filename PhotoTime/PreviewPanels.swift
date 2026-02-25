@@ -26,13 +26,6 @@ struct SingleFramePreviewPanel: View {
                         }
                 }
 
-                if viewModel.isPreviewGenerating {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                }
-
                 if let previewError = viewModel.previewErrorMessage {
                     Text("预览错误: \(previewError)")
                         .font(.caption)
@@ -140,12 +133,6 @@ struct VideoTimelinePreviewPanel: View {
                         .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
                     }
 
-                    if viewModel.isPreviewGenerating {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
                 }
 
                 if let previewError = viewModel.previewErrorMessage {

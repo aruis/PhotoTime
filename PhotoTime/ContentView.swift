@@ -35,6 +35,7 @@ struct ContentView: View {
     @State private var centerPreviewTab: CenterPreviewTab = .singleFrame
     @State private var settingsTab: SettingsTab = .simple
     @State private var selectedAssetURL: URL?
+    @State private var selectedAssetURLs: Set<URL> = []
     @State private var singlePreviewDebounceTask: Task<Void, Never>?
     @State private var isAssetDropTarget = false
     @State private var isAudioDropTarget = false
@@ -128,11 +129,13 @@ struct ContentView: View {
         .onChange(of: viewModel.imageURLs) { _, urls in
             guard !urls.isEmpty else {
                 selectedAssetURL = nil
+                selectedAssetURLs = []
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
                 }
                 return
             }
+            selectedAssetURLs = selectedAssetURLs.intersection(Set(urls))
             if let selectedAssetURL, urls.contains(selectedAssetURL) {
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
@@ -140,11 +143,21 @@ struct ContentView: View {
                 return
             }
             selectedAssetURL = urls.first
+            if let first = urls.first {
+                selectedAssetURLs = [first]
+            }
         }
         .onChange(of: selectedAssetURL) { _, _ in
             if centerPreviewTab == .singleFrame {
                 scheduleSingleFramePreview()
             }
+        }
+        .onChange(of: selectedAssetURLs) { _, urls in
+            guard !urls.isEmpty else { return }
+            if let selectedAssetURL, urls.contains(selectedAssetURL) {
+                return
+            }
+            selectedAssetURL = viewModel.imageURLs.first(where: { urls.contains($0) })
         }
         .onChange(of: centerPreviewTab) { _, tab in
             applyPreviewModePolicy(for: tab)
@@ -163,6 +176,7 @@ struct ContentView: View {
         AssetSidebarPanel(
             viewModel: viewModel,
             selectedAssetURL: $selectedAssetURL,
+            selectedAssetURLs: $selectedAssetURLs,
             isAssetDropTarget: $isAssetDropTarget,
             draggingAssetURL: $draggingAssetURL
         )
@@ -204,12 +218,18 @@ struct ContentView: View {
                         }
 
                         if viewModel.hasSelectedImages {
-                            Picker("预览模式", selection: $centerPreviewTab) {
-                                ForEach(CenterPreviewTab.allCases) { tab in
-                                    Text(tab.title).tag(tab)
+                            HStack {
+                                Spacer(minLength: 0)
+                                Picker("", selection: $centerPreviewTab) {
+                                    ForEach(CenterPreviewTab.allCases) { tab in
+                                        Text(tab.title).tag(tab)
+                                    }
                                 }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                                .frame(maxWidth: 220)
+                                Spacer(minLength: 0)
                             }
-                            .pickerStyle(.segmented)
 
                             if centerPreviewTab == .singleFrame {
                                 previewPanel
@@ -307,76 +327,76 @@ struct ContentView: View {
     }
 
     private var emptyPreviewPanel: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.secondary.opacity(0.05))
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 1)
-
-            VStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.left")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("从左侧开始，先导入图片")
-                        .font(.headline)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.secondary.opacity(0.08), in: Capsule())
-
-                Text("导入后，这里会显示预览与导出状态。")
-                    .font(.callout)
+        VStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.left")
+                    .font(.headline)
                     .foregroundStyle(.secondary)
+                Text("从左侧开始，先导入图片")
+                    .font(.headline)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            .multilineTextAlignment(.center)
-            .padding(24)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.secondary.opacity(0.08), in: Capsule())
+
+            Text("导入后，这里会显示预览与导出状态。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .multilineTextAlignment(.center)
+        .padding(24)
         .frame(minHeight: 320)
     }
 
     private var exportStatusPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            WorkflowOverviewPanel(
-                statusMessage: viewModel.statusMessage,
-                nextActionHint: viewModel.nextActionHint,
-                firstRunPrimaryActionTitle: firstRunPrimaryAction?.title,
-                isBusy: viewModel.isBusy,
-                onFirstRunPrimaryAction: { firstRunPrimaryAction?.handler() }
-            )
-
-            if viewModel.isExporting {
-                ProgressView(value: viewModel.progress)
-                    .frame(maxWidth: .infinity)
-            }
-
-            if viewModel.hasFailureCard, let copy = viewModel.failureCardCopy {
-                FailureStatusCard(
-                    copy: copy,
+            if shouldShowDetailedWorkflowStatus {
+                WorkflowOverviewPanel(
+                    statusMessage: viewModel.statusMessage,
+                    nextActionHint: viewModel.nextActionHint,
+                    firstRunPrimaryActionTitle: firstRunPrimaryAction?.title,
                     isBusy: viewModel.isBusy,
-                    onPrimaryAction: { viewModel.performRecoveryAction() },
-                    onOpenLog: { viewModel.openLatestLog() }
+                    onFirstRunPrimaryAction: { firstRunPrimaryAction?.handler() }
                 )
-            }
 
-            if viewModel.hasSuccessCard {
-                SuccessStatusCard(
-                    filename: viewModel.latestOutputFilename,
-                    logPath: viewModel.latestLogPath,
-                    isBusy: viewModel.isBusy,
-                    onExportAgain: { viewModel.export() },
-                    onOpenOutputFile: { viewModel.openLatestOutputFile() },
-                    onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
-                    onOpenLog: { viewModel.openLatestLog() }
-                )
-            }
+                if viewModel.isExporting {
+                    ProgressView(value: viewModel.progress)
+                        .frame(maxWidth: .infinity)
+                }
 
-            if !viewModel.failedAssetNames.isEmpty {
-                FailedAssetsPanel(
-                    names: failedAssetNamesPreview,
-                    hiddenCount: failedAssetHiddenCount
-                )
+                if viewModel.hasFailureCard, let copy = viewModel.failureCardCopy {
+                    FailureStatusCard(
+                        copy: copy,
+                        isBusy: viewModel.isBusy,
+                        onPrimaryAction: { viewModel.performRecoveryAction() },
+                        onOpenLog: { viewModel.openLatestLog() }
+                    )
+                }
+
+                if viewModel.hasSuccessCard {
+                    SuccessStatusCard(
+                        filename: viewModel.latestOutputFilename,
+                        logPath: viewModel.latestLogPath,
+                        isBusy: viewModel.isBusy,
+                        onExportAgain: { viewModel.export() },
+                        onOpenOutputFile: { viewModel.openLatestOutputFile() },
+                        onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
+                        onOpenLog: { viewModel.openLatestLog() }
+                    )
+                }
+
+                if !viewModel.failedAssetNames.isEmpty {
+                    FailedAssetsPanel(
+                        names: failedAssetNamesPreview,
+                        hiddenCount: failedAssetHiddenCount
+                    )
+                }
+            } else if let primary = firstRunPrimaryAction {
+                Button(primary.title) { primary.handler() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(viewModel.isBusy)
             }
         }
     }
@@ -460,6 +480,14 @@ struct ContentView: View {
             return selectedAssetURL
         }
         return viewModel.imageURLs.first
+    }
+
+    private var shouldShowDetailedWorkflowStatus: Bool {
+        viewModel.isExporting
+            || viewModel.hasFailureCard
+            || viewModel.hasSuccessCard
+            || !viewModel.failedAssetNames.isEmpty
+            || viewModel.validationMessage != nil
     }
 
     private var shouldUseFullHeightEmptyState: Bool {
