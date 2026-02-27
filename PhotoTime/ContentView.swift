@@ -3,6 +3,14 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    enum LayoutMode {
+        case app
+        case workspaceOnly
+        case sidebarOnly
+        case centerOnly
+        case settingsOnly
+    }
+
     private enum CenterPreviewTab: String, CaseIterable, Identifiable {
         case singleFrame
         case videoTimeline
@@ -31,7 +39,8 @@ struct ContentView: View {
         }
     }
 
-    @StateObject private var viewModel = ExportViewModel()
+    @StateObject private var viewModel: ExportViewModel
+    private let layoutMode: LayoutMode
     @State private var centerPreviewTab: CenterPreviewTab = .singleFrame
     @State private var settingsTab: SettingsTab = .simple
     @State private var selectedAssetURL: URL?
@@ -48,127 +57,157 @@ struct ContentView: View {
     @State private var preflightSecondaryActionsExpanded = false
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
 
+    init() {
+        _viewModel = StateObject(wrappedValue: ExportViewModel())
+        self.layoutMode = .app
+    }
+
+    fileprivate init(viewModel: ExportViewModel, layoutMode: LayoutMode) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+        self.layoutMode = layoutMode
+    }
+
     var body: some View {
-        NavigationSplitView(columnVisibility: $splitColumnVisibility) {
-            sidebarAssetColumn
-                .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
-        } detail: {
-            workspaceDetailSplit
-                .navigationSplitViewColumnWidth(min: 860, ideal: 1040)
-        }
-        .navigationSplitViewStyle(.balanced)
-        .navigationTitle("PhotoTime")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if viewModel.hasSelectedImages {
-                    Button("导出 MP4") { viewModel.export() }
-                        .accessibilityIdentifier("primary_export")
-                        .disabled(!viewModel.canRunExport)
-                }
-                if viewModel.isExporting {
-                    Button("取消导出") { viewModel.cancelExport() }
-                        .accessibilityIdentifier("primary_cancel")
-                        .disabled(!viewModel.actionAvailability.canCancelExport)
+        rootContent
+            .onAppear {
+                applyPreviewModePolicy(for: centerPreviewTab)
+                if centerPreviewTab == .singleFrame {
+                    scheduleSingleFramePreview()
                 }
             }
+            .onChange(of: viewModel.configSignature) { _, _ in
+                viewModel.handleConfigChanged()
+                if centerPreviewTab == .singleFrame {
+                    scheduleSingleFramePreview()
+                }
+            }
+            .onChange(of: viewModel.imageURLs) { _, urls in
+                guard !urls.isEmpty else {
+                    selectedAssetURL = nil
+                    selectedAssetURLs = []
+                    if centerPreviewTab == .singleFrame {
+                        scheduleSingleFramePreview()
+                    }
+                    return
+                }
+                selectedAssetURLs = selectedAssetURLs.intersection(Set(urls))
+                if let selectedAssetURL, urls.contains(selectedAssetURL) {
+                    if centerPreviewTab == .singleFrame {
+                        scheduleSingleFramePreview()
+                    }
+                    return
+                }
+                selectedAssetURL = urls.first
+                if let first = urls.first {
+                    selectedAssetURLs = [first]
+                }
+            }
+            .onChange(of: selectedAssetURL) { _, _ in
+                if centerPreviewTab == .singleFrame {
+                    scheduleSingleFramePreview()
+                }
+            }
+            .onChange(of: selectedAssetURLs) { _, urls in
+                guard !urls.isEmpty else { return }
+                if let selectedAssetURL, urls.contains(selectedAssetURL) {
+                    return
+                }
+                selectedAssetURL = viewModel.imageURLs.first(where: { urls.contains($0) })
+            }
+            .onChange(of: centerPreviewTab) { _, tab in
+                applyPreviewModePolicy(for: tab)
+                if tab == .singleFrame {
+                    scheduleSingleFramePreview()
+                } else {
+                    viewModel.generatePreview()
+                }
+            }
+            .onDisappear {
+                viewModel.stopAudioPreview()
+            }
+    }
 
-            ToolbarItem(placement: .automatic) {
-                Menu("更多") {
-                    Button("选择导出路径") { viewModel.chooseOutput() }
-                        .accessibilityIdentifier("primary_select_output")
-                        .disabled(!viewModel.actionAvailability.canSelectOutput)
+    @ViewBuilder
+    private var rootContent: some View {
+        switch layoutMode {
+        case .app:
+            NavigationSplitView(columnVisibility: $splitColumnVisibility) {
+                sidebarAssetColumn
+                    .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
+            } detail: {
+                workspaceDetailSplit
+                    .navigationSplitViewColumnWidth(min: 860, ideal: 1040)
+            }
+            .navigationSplitViewStyle(.balanced)
+            .navigationTitle("PhotoTime")
+            .toolbar {
+                ToolbarItemGroup(placement: .primaryAction) {
                     if viewModel.hasSelectedImages {
-                        Button("生成预览") {
-                            if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
-                                viewModel.generatePreviewForSelectedAsset(selected)
-                            } else {
-                                viewModel.generatePreview()
-                            }
-                        }
-                            .accessibilityIdentifier("secondary_preview")
-                            .disabled(!viewModel.canRunPreview)
-                        Button("运行预检") { viewModel.rerunPreflight() }
-                            .accessibilityIdentifier("secondary_rerun_preflight")
-                            .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
-                        Divider()
-                        Button("导入模板") { viewModel.importTemplate() }
-                            .accessibilityIdentifier("secondary_import_template")
-                            .disabled(!viewModel.actionAvailability.canImportTemplate)
-                        Button("保存模板") { viewModel.exportTemplate() }
-                            .accessibilityIdentifier("secondary_export_template")
-                            .disabled(!viewModel.actionAvailability.canSaveTemplate)
-                        Button("重试上次导出") { viewModel.retryLastExport() }
-                            .accessibilityIdentifier("secondary_retry_export")
-                            .disabled(!viewModel.actionAvailability.canRetryExport)
-                        Divider()
-                        Button("导出排障包") { viewModel.exportDiagnosticsBundle() }
-                            .accessibilityIdentifier("secondary_export_diagnostics")
-                            .disabled(viewModel.isBusy)
-                        #if DEBUG
-                        Divider()
-                        Button("模拟导出失败") { viewModel.simulateExportFailure() }
-                            .disabled(viewModel.isBusy)
-                        #endif
+                        Button("导出 MP4") { viewModel.export() }
+                            .accessibilityIdentifier("primary_export")
+                            .disabled(!viewModel.canRunExport)
+                    }
+                    if viewModel.isExporting {
+                        Button("取消导出") { viewModel.cancelExport() }
+                            .accessibilityIdentifier("primary_cancel")
+                            .disabled(!viewModel.actionAvailability.canCancelExport)
                     }
                 }
-                .accessibilityIdentifier("toolbar_more_menu")
-            }
-        }
-        .onAppear {
-            applyPreviewModePolicy(for: centerPreviewTab)
-            if centerPreviewTab == .singleFrame {
-                scheduleSingleFramePreview()
-            }
-        }
-        .onChange(of: viewModel.configSignature) { _, _ in
-            viewModel.handleConfigChanged()
-            if centerPreviewTab == .singleFrame {
-                scheduleSingleFramePreview()
-            }
-        }
-        .onChange(of: viewModel.imageURLs) { _, urls in
-            guard !urls.isEmpty else {
-                selectedAssetURL = nil
-                selectedAssetURLs = []
-                if centerPreviewTab == .singleFrame {
-                    scheduleSingleFramePreview()
+
+                ToolbarItem(placement: .automatic) {
+                    Menu("更多") {
+                        Button("选择导出路径") { viewModel.chooseOutput() }
+                            .accessibilityIdentifier("primary_select_output")
+                            .disabled(!viewModel.actionAvailability.canSelectOutput)
+                        if viewModel.hasSelectedImages {
+                            Button("生成预览") {
+                                if centerPreviewTab == .singleFrame, let selected = selectedAssetForPreview {
+                                    viewModel.generatePreviewForSelectedAsset(selected)
+                                } else {
+                                    viewModel.generatePreview()
+                                }
+                            }
+                                .accessibilityIdentifier("secondary_preview")
+                                .disabled(!viewModel.canRunPreview)
+                            Button("运行预检") { viewModel.rerunPreflight() }
+                                .accessibilityIdentifier("secondary_rerun_preflight")
+                                .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                            Divider()
+                            Button("导入模板") { viewModel.importTemplate() }
+                                .accessibilityIdentifier("secondary_import_template")
+                                .disabled(!viewModel.actionAvailability.canImportTemplate)
+                            Button("保存模板") { viewModel.exportTemplate() }
+                                .accessibilityIdentifier("secondary_export_template")
+                                .disabled(!viewModel.actionAvailability.canSaveTemplate)
+                            Button("重试上次导出") { viewModel.retryLastExport() }
+                                .accessibilityIdentifier("secondary_retry_export")
+                                .disabled(!viewModel.actionAvailability.canRetryExport)
+                            Divider()
+                            Button("导出排障包") { viewModel.exportDiagnosticsBundle() }
+                                .accessibilityIdentifier("secondary_export_diagnostics")
+                                .disabled(viewModel.isBusy)
+                            #if DEBUG
+                            Divider()
+                            Button("模拟导出失败") { viewModel.simulateExportFailure() }
+                                .disabled(viewModel.isBusy)
+                            #endif
+                        }
+                    }
+                    .accessibilityIdentifier("toolbar_more_menu")
                 }
-                return
             }
-            selectedAssetURLs = selectedAssetURLs.intersection(Set(urls))
-            if let selectedAssetURL, urls.contains(selectedAssetURL) {
-                if centerPreviewTab == .singleFrame {
-                    scheduleSingleFramePreview()
-                }
-                return
-            }
-            selectedAssetURL = urls.first
-            if let first = urls.first {
-                selectedAssetURLs = [first]
-            }
-        }
-        .onChange(of: selectedAssetURL) { _, _ in
-            if centerPreviewTab == .singleFrame {
-                scheduleSingleFramePreview()
-            }
-        }
-        .onChange(of: selectedAssetURLs) { _, urls in
-            guard !urls.isEmpty else { return }
-            if let selectedAssetURL, urls.contains(selectedAssetURL) {
-                return
-            }
-            selectedAssetURL = viewModel.imageURLs.first(where: { urls.contains($0) })
-        }
-        .onChange(of: centerPreviewTab) { _, tab in
-            applyPreviewModePolicy(for: tab)
-            if tab == .singleFrame {
-                scheduleSingleFramePreview()
-            } else {
-                viewModel.generatePreview()
-            }
-        }
-        .onDisappear {
-            viewModel.stopAudioPreview()
+        case .workspaceOnly:
+            workspaceDetailSplit
+                .frame(minWidth: 980, minHeight: 720)
+        case .sidebarOnly:
+            sidebarAssetColumn
+                .frame(minWidth: 300, minHeight: 720)
+        case .centerOnly:
+            centerPreviewColumn
+                .frame(minWidth: 760, minHeight: 720)
+        case .settingsOnly:
+            rightSettingsColumn
+                .frame(minWidth: 380, minHeight: 720)
         }
     }
 
@@ -351,40 +390,13 @@ struct ContentView: View {
 
     private var exportStatusPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if shouldShowDetailedWorkflowStatus {
-                WorkflowOverviewPanel(
-                    statusMessage: viewModel.statusMessage,
-                    nextActionHint: viewModel.nextActionHint,
-                    firstRunPrimaryActionTitle: firstRunPrimaryAction?.title,
+            if viewModel.hasFailureCard, let copy = viewModel.failureCardCopy {
+                FailureStatusCard(
+                    copy: copy,
                     isBusy: viewModel.isBusy,
-                    onFirstRunPrimaryAction: { firstRunPrimaryAction?.handler() }
+                    onPrimaryAction: { viewModel.performRecoveryAction() },
+                    onOpenLog: { viewModel.openLatestLog() }
                 )
-
-                if viewModel.isExporting {
-                    ProgressView(value: viewModel.progress)
-                        .frame(maxWidth: .infinity)
-                }
-
-                if viewModel.hasFailureCard, let copy = viewModel.failureCardCopy {
-                    FailureStatusCard(
-                        copy: copy,
-                        isBusy: viewModel.isBusy,
-                        onPrimaryAction: { viewModel.performRecoveryAction() },
-                        onOpenLog: { viewModel.openLatestLog() }
-                    )
-                }
-
-                if viewModel.hasSuccessCard {
-                    SuccessStatusCard(
-                        filename: viewModel.latestOutputFilename,
-                        logPath: viewModel.latestLogPath,
-                        isBusy: viewModel.isBusy,
-                        onExportAgain: { viewModel.export() },
-                        onOpenOutputFile: { viewModel.openLatestOutputFile() },
-                        onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
-                        onOpenLog: { viewModel.openLatestLog() }
-                    )
-                }
 
                 if !viewModel.failedAssetNames.isEmpty {
                     FailedAssetsPanel(
@@ -392,11 +404,49 @@ struct ContentView: View {
                         hiddenCount: failedAssetHiddenCount
                     )
                 }
-            } else if let primary = firstRunPrimaryAction {
-                Button(primary.title) { primary.handler() }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(viewModel.isBusy)
+            } else if viewModel.hasSuccessCard {
+                SuccessStatusCard(
+                    filename: viewModel.latestOutputFilename,
+                    logPath: viewModel.latestLogPath,
+                    isBusy: viewModel.isBusy,
+                    onExportAgain: { viewModel.export() },
+                    onOpenOutputFile: { viewModel.openLatestOutputFile() },
+                    onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
+                    onOpenLog: { viewModel.openLatestLog() }
+                )
+            } else if viewModel.validationMessage != nil {
+                WorkflowOverviewPanel(
+                    statusMessage: viewModel.statusMessage,
+                    nextActionHint: viewModel.nextActionHint,
+                    firstRunPrimaryActionTitle: firstRunPrimaryAction?.title,
+                    firstRunPrimaryActionSubtitle: firstRunPrimaryActionSubtitle,
+                    isBusy: viewModel.isBusy,
+                    onFirstRunPrimaryAction: { firstRunPrimaryAction?.handler() }
+                )
+            } else {
+                HStack(spacing: 10) {
+                    if let primary = firstRunPrimaryAction {
+                        WorkflowPrimaryActionButton(
+                            title: primary.title,
+                            subtitle: firstRunPrimaryActionSubtitle,
+                            isBusy: viewModel.isBusy,
+                            accessibilityIdentifier: "workflow_primary_action",
+                            action: primary.handler
+                        )
+                            .disabled(viewModel.isBusy)
+                    }
+
+                    if viewModel.isExporting {
+                        Text("正在导出…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if viewModel.isExporting {
+                    ProgressView(value: viewModel.progress)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
     }
@@ -421,6 +471,25 @@ struct ContentView: View {
             })
         }
         return nil
+    }
+
+    private var firstRunPrimaryActionSubtitle: String? {
+        guard let primary = firstRunPrimaryAction else { return nil }
+        switch primary.title {
+        case "导出 MP4":
+            let count = viewModel.imageURLs.count
+            let assetText = count == 1 ? "1 张图片" : "\(count) 张图片"
+            if let outputURL = viewModel.outputURL {
+                return "\(assetText) · 输出到 \(outputURL.lastPathComponent)"
+            }
+            return "\(assetText) · 请先选择导出路径"
+        case "导入图片":
+            return "从本地选择素材，开始生成视频"
+        case "可选：生成预览":
+            return "先确认画面效果，再决定是否导出"
+        default:
+            return nil
+        }
     }
 
     private func preflightIssueExpandedBinding(for key: String) -> Binding<Bool> {
@@ -480,14 +549,6 @@ struct ContentView: View {
             return selectedAssetURL
         }
         return viewModel.imageURLs.first
-    }
-
-    private var shouldShowDetailedWorkflowStatus: Bool {
-        viewModel.isExporting
-            || viewModel.hasFailureCard
-            || viewModel.hasSuccessCard
-            || !viewModel.failedAssetNames.isEmpty
-            || viewModel.validationMessage != nil
     }
 
     private var shouldUseFullHeightEmptyState: Bool {
@@ -550,13 +611,17 @@ struct ContentView: View {
                 SimpleSettingsPanel(
                     viewModel: viewModel,
                     isAudioDropTarget: $isAudioDropTarget,
-                    onAudioDrop: handleAudioDrop(providers:)
+                    onAudioDrop: { providers in
+                        handleAudioDrop(providers: providers)
+                    }
                 )
             } else {
                 AdvancedSettingsPanel(
                     viewModel: viewModel,
                     isAudioDropTarget: $isAudioDropTarget,
-                    onAudioDrop: handleAudioDrop(providers:)
+                    onAudioDrop: { providers in
+                        handleAudioDrop(providers: providers)
+                    }
                 )
             }
         }
@@ -610,6 +675,54 @@ struct ContentView: View {
     }
 }
 
-#Preview {
+#Preview("App") {
     ContentView()
+}
+
+#Preview("Workspace") {
+    ContentView(
+        viewModel: ContentView.makeWorkspacePreviewViewModel(),
+        layoutMode: .workspaceOnly
+    )
+}
+
+#Preview("Sidebar") {
+    ContentView(
+        viewModel: ContentView.makeWorkspacePreviewViewModel(),
+        layoutMode: .sidebarOnly
+    )
+}
+
+#Preview("Center") {
+    ContentView(
+        viewModel: ContentView.makeWorkspacePreviewViewModel(),
+        layoutMode: .centerOnly
+    )
+}
+
+#Preview("Settings") {
+    ContentView(
+        viewModel: ContentView.makeWorkspacePreviewViewModel(),
+        layoutMode: .settingsOnly
+    )
+}
+
+private extension ContentView {
+    static func makeWorkspacePreviewViewModel() -> ExportViewModel {
+        let viewModel = ExportViewModel()
+        viewModel.imageURLs = [
+            URL(fileURLWithPath: "/tmp/preview-a.jpg"),
+            URL(fileURLWithPath: "/tmp/preview-b.jpg"),
+            URL(fileURLWithPath: "/tmp/preview-c.jpg")
+        ]
+        viewModel.outputURL = URL(fileURLWithPath: "/tmp/PhotoTime-Preview.mp4")
+        viewModel.selectedAudioDuration = 18.4
+        viewModel.config.audioEnabled = true
+        viewModel.config.audioLoopEnabled = true
+        viewModel.config.audioFilePath = "/tmp/preview-bgm.m4a"
+        viewModel.previewImage = NSImage(size: CGSize(width: 1440, height: 900))
+        viewModel.previewStatusMessage = "预览已更新 (0.00s)"
+        viewModel.workflow.setIdleMessage("已就绪，可直接导出 MP4。")
+        return viewModel
+    }
 }

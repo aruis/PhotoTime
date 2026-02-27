@@ -71,11 +71,9 @@ final class PhotoTimeUITests: XCTestCase {
         app.launchArguments += ["-ui-test-scenario", "failure"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: uiTimeout))
-        let status = app.staticTexts["workflow_status_message"].label
-        XCTAssertFalse(status.contains("请选择图片并设置导出路径"), "status=\(status)")
         XCTAssertTrue(app.buttons["failure_primary_action"].waitForExistence(timeout: uiTimeout))
         XCTAssertTrue(app.buttons["failure_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertFalse(app.staticTexts["workflow_status_message"].exists)
     }
 
     @MainActor
@@ -84,11 +82,9 @@ final class PhotoTimeUITests: XCTestCase {
         app.launchArguments += ["-ui-test-scenario", "success"]
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["workflow_status_message"].waitForExistence(timeout: uiTimeout))
-        let status = app.staticTexts["workflow_status_message"].label
-        XCTAssertFalse(status.contains("请选择图片并设置导出路径"), "status=\(status)")
         XCTAssertTrue(app.buttons["success_open_output"].waitForExistence(timeout: uiTimeout))
         XCTAssertTrue(app.buttons["success_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertFalse(app.staticTexts["workflow_status_message"].exists)
     }
 
     @MainActor

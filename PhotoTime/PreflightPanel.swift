@@ -18,20 +18,23 @@ struct PreflightPanel: View {
         GroupBox("导出前检查") {
             VStack(alignment: .leading, spacing: 12) {
                 preflightSummaryRow
-                primaryActionsRow
-                preflightFilterRow
-                issueListSection
+                compactActionsRow
+                compactIssuePreview
 
-                DisclosureGroup("更多选项", isExpanded: $preflightSecondaryActionsExpanded) {
-                    secondaryOptionsPanel
+                DisclosureGroup("查看全部问题与筛选", isExpanded: $preflightSecondaryActionsExpanded) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        preflightFilterRow
+                        issueListSection
+                        secondaryOptionsPanel
+                        if !viewModel.skippedAssetNamesFromPreflight.isEmpty {
+                            Text("已跳过: \(viewModel.skippedAssetNamesFromPreflight.joined(separator: ", "))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.top, 2)
                 }
                 .font(.caption)
-
-                if !viewModel.skippedAssetNamesFromPreflight.isEmpty {
-                    Text("已跳过: \(viewModel.skippedAssetNamesFromPreflight.joined(separator: ", "))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
@@ -59,16 +62,8 @@ struct PreflightPanel: View {
         }
     }
 
-    private var primaryActionsRow: some View {
+    private var compactActionsRow: some View {
         HStack(spacing: 8) {
-            Button("仅看问题素材") {
-                if let url = viewModel.focusOnProblematicAssets() {
-                    onSelectAsset(url)
-                }
-            }
-            .controlSize(.small)
-            .disabled(viewModel.isBusy)
-
             Button("重新检查") {
                 viewModel.rerunPreflight()
             }
@@ -82,6 +77,38 @@ struct PreflightPanel: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(viewModel.isBusy)
+            }
+
+            Spacer(minLength: 0)
+
+            if let first = displayIssues.first {
+                Button("定位首个问题") {
+                    if let url = viewModel.focusAssetForIssue(first) {
+                        onSelectAsset(url)
+                    }
+                }
+                .controlSize(.small)
+                .disabled(viewModel.isBusy)
+            }
+        }
+    }
+
+    private var compactIssuePreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let first = displayIssues.first {
+                issueRow(first)
+
+                let hiddenCount = max(0, displayIssues.count - 1)
+                if hiddenCount > 0 {
+                    Text("另有 \(hiddenCount) 项问题，展开“查看全部问题与筛选”可处理。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("当前筛选下没有问题项。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 2)
             }
         }
     }

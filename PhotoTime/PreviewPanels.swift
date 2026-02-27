@@ -4,33 +4,21 @@ struct SingleFramePreviewPanel: View {
     @ObservedObject var viewModel: ExportViewModel
 
     var body: some View {
-        GroupBox {
+        GroupBox("单帧预览") {
             VStack(alignment: .leading, spacing: 12) {
-                if let preview = viewModel.previewImage {
-                    Image(nsImage: preview)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .padding(.vertical, 4)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.08))
-                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .overlay {
-                            VStack(spacing: 6) {
-                                Image(systemName: "photo")
-                                Text("尚未生成预览")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                }
+                previewSurface(
+                    image: viewModel.previewImage,
+                    placeholderSystemImage: "photo",
+                    placeholderText: "尚未生成单帧预览",
+                    accessibilityIdentifier: "single_frame_preview_surface"
+                )
 
-                if let previewError = viewModel.previewErrorMessage {
-                    Text("预览错误: \(previewError)")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
+                PreviewStatusRow(
+                    statusMessage: viewModel.previewStatusMessage,
+                    errorMessage: viewModel.previewErrorMessage,
+                    isBusy: viewModel.isPreviewGenerating,
+                    accessibilityIdentifier: "single_frame_preview_status"
+                )
             }
         }
     }
@@ -41,7 +29,7 @@ struct VideoTimelinePreviewPanel: View {
     let audioSegments: [(start: Double, end: Double)]
 
     var body: some View {
-        GroupBox {
+        GroupBox("时间轴预览") {
             VStack(alignment: .leading, spacing: 12) {
                 if viewModel.config.audioEnabled {
                     VStack(alignment: .leading, spacing: 6) {
@@ -97,50 +85,112 @@ struct VideoTimelinePreviewPanel: View {
                     }
                 }
 
-                if let preview = viewModel.previewImage {
-                    Image(nsImage: preview)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .padding(.vertical, 4)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.08))
-                        .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
-                        .overlay {
-                            VStack(spacing: 6) {
-                                Image(systemName: "film")
-                                Text("尚未生成预览")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                }
+                previewSurface(
+                    image: viewModel.previewImage,
+                    placeholderSystemImage: "film",
+                    placeholderText: "尚未生成时间轴预览",
+                    accessibilityIdentifier: "timeline_preview_surface"
+                )
+
+                PreviewStatusRow(
+                    statusMessage: viewModel.previewStatusMessage,
+                    errorMessage: viewModel.previewErrorMessage,
+                    isBusy: viewModel.isPreviewGenerating,
+                    accessibilityIdentifier: "timeline_preview_status"
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 10) {
                         Text("时间: \(viewModel.previewSecond, specifier: "%.2f")s")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Slider(
-                            value: $viewModel.previewSecond,
-                            in: 0...max(viewModel.previewMaxSecond, 0.001)
-                        )
-                        .onChange(of: viewModel.previewSecond) { _, _ in
-                            viewModel.schedulePreviewRegeneration()
-                            viewModel.syncAudioPreviewPosition()
-                        }
-                        .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                        Spacer(minLength: 0)
+                        Text("总时长: \(viewModel.previewMaxSecond, specifier: "%.2f")s")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .accessibilityIdentifier("timeline_preview_duration")
                     }
 
-                }
+                    Slider(
+                        value: $viewModel.previewSecond,
+                        in: 0...max(viewModel.previewMaxSecond, 0.001)
+                    )
+                    .onChange(of: viewModel.previewSecond) { _, _ in
+                        viewModel.schedulePreviewRegeneration()
+                        viewModel.syncAudioPreviewPosition()
+                    }
+                    .disabled(viewModel.isBusy || viewModel.imageURLs.isEmpty)
+                    .accessibilityIdentifier("timeline_preview_slider")
 
-                if let previewError = viewModel.previewErrorMessage {
-                    Text("预览错误: \(previewError)")
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                    if !viewModel.canRunPreview && !viewModel.imageURLs.isEmpty {
+                        Text("当前参数下无法刷新预览，请先修正校验问题或等待当前任务结束。")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
+    }
+}
+
+private extension View {
+    func previewSurface(
+        image: NSImage?,
+        placeholderSystemImage: String,
+        placeholderText: String,
+        accessibilityIdentifier: String
+    ) -> some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                    .padding(.vertical, 4)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.08))
+                    .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
+                    .overlay {
+                        VStack(spacing: 6) {
+                            Image(systemName: placeholderSystemImage)
+                            Text(placeholderText)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+            }
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct PreviewStatusRow: View {
+    let statusMessage: String
+    let errorMessage: String?
+    let isBusy: Bool
+    let accessibilityIdentifier: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                if isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(statusMessage)
+                    .font(.caption)
+                    .foregroundStyle(isBusy ? .primary : .secondary)
+                    .lineLimit(2)
+            }
+
+            if let errorMessage {
+                Text("预览错误: \(errorMessage)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
