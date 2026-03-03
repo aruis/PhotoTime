@@ -201,17 +201,35 @@ final class FrameComposer {
     nonisolated private func resolvedFrameRects(for orientedImage: CIImage) -> (paperRect: CGRect, photoRect: CGRect, plateTextRect: CGRect) {
         let frameMargin = CGFloat(settings.layout.innerPadding)
         let maxPaperRect = layout.paperRect
-        let maxPhotoRect = maxPaperRect.insetBy(dx: frameMargin, dy: frameMargin)
+        let framePlateHeight = (settings.plate.enabled && settings.plate.placement == .frame)
+            ? CGFloat(settings.plate.height)
+            : 0
+
+        let sideInset = frameMargin
+        let topInset = frameMargin
+        let bottomInset = frameMargin + framePlateHeight
+
+        let maxPhotoRect = CGRect(
+            x: maxPaperRect.minX + sideInset,
+            y: maxPaperRect.minY + bottomInset,
+            width: max(0, maxPaperRect.width - sideInset * 2),
+            height: max(0, maxPaperRect.height - topInset - bottomInset)
+        )
         let photoRect = fitRect(source: orientedImage.extent.size, inside: maxPhotoRect)
-        let paperRect = photoRect.insetBy(dx: -frameMargin, dy: -frameMargin)
+        let paperRect = CGRect(
+            x: photoRect.minX - sideInset,
+            y: photoRect.minY - bottomInset,
+            width: photoRect.width + sideInset * 2,
+            height: photoRect.height + topInset + bottomInset
+        ).integral
 
         let plateTextRect: CGRect
         switch settings.plate.placement {
         case .frame:
             let band = CGRect(
-                x: paperRect.minX + frameMargin,
+                x: paperRect.minX + sideInset,
                 y: paperRect.minY,
-                width: max(0, paperRect.width - frameMargin * 2),
+                width: max(0, paperRect.width - sideInset * 2),
                 height: max(0, photoRect.minY - paperRect.minY)
             )
             plateTextRect = CGRect(
