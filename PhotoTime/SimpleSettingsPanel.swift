@@ -1,10 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SimpleSettingsPanel: View {
     @ObservedObject var viewModel: ExportViewModel
     @Binding var isAudioDropTarget: Bool
     let onAudioDrop: ([NSItemProvider]) -> Bool
     @State private var plateLiteralInput = ""
+    @State private var isPlateReordering = false
+    @State private var plateSimpleDrafts: [PlateSimpleElementKey: String] = [:]
+    @State private var draggedPlateSimpleKey: PlateSimpleElementKey?
 
     private enum ResolutionChoice: Int, CaseIterable, Identifiable {
         case hd720
@@ -129,7 +133,7 @@ struct SimpleSettingsPanel: View {
                 .disabled(viewModel.isBusy || !viewModel.config.plateEnabled)
 
                 plateContentEditor
-                    .disabled(viewModel.isBusy || !viewModel.config.plateEnabled)
+                    .disabled(viewModel.isBusy)
             }
 
             Section("风格") {
@@ -187,13 +191,85 @@ struct SimpleSettingsPanel: View {
             .pickerStyle(.segmented)
 
             if viewModel.config.plateEditorMode == .simple {
-                Picker("铭牌内容", selection: platePresetBinding) {
-                    Text(PlateContentPreset.exposureTriad.displayName).tag(PlateContentPreset.exposureTriad)
-                    Text(PlateContentPreset.exposureWithFocal.displayName).tag(PlateContentPreset.exposureWithFocal)
-                    Text(PlateContentPreset.dateAndCamera.displayName).tag(PlateContentPreset.dateAndCamera)
+                HStack {
+                    Text("铭牌内容")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(isPlateReordering ? "完成排序" : "排序") {
+                        commitAllPlateSimpleDrafts()
+                        isPlateReordering.toggle()
+                    }
+                    .controlSize(.small)
                 }
-                .pickerStyle(.segmented)
-            } else {
+                ScrollView {
+                    VStack(spacing: 6) {
+                        ForEach(viewModel.config.plateSimpleElements.indices, id: \.self) { index in
+                            let key = viewModel.config.plateSimpleElements[index].key
+                            HStack(spacing: 8) {
+                                Toggle("", isOn: $viewModel.config.plateSimpleElements[index].enabled)
+                                    .labelsHidden()
+                                    .focusable(false)
+                                Text(key.displayName)
+                                    .frame(width: 72, alignment: .leading)
+                                TextField(
+                                    "",
+                                    text: draftBinding(for: $viewModel.config.plateSimpleElements[index]),
+                                    onEditingChanged: { editing in
+                                        if !editing {
+                                            commitPlateSimpleDraft(for: key)
+                                        }
+                                    },
+                                    onCommit: {
+                                        commitPlateSimpleDraft(for: key)
+                                    }
+                                )
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.caption, design: .monospaced))
+                                .disabled(isPlateReordering)
+                                if isPlateReordering {
+                                    Image(systemName: "line.3.horizontal")
+                                        .foregroundStyle(.secondary)
+                                        .onDrag {
+                                            draggedPlateSimpleKey = key
+                                            return NSItemProvider(object: key.rawValue as NSString)
+                                        }
+
+                                    HStack(spacing: 4) {
+                                        Button {
+                                            moveSimpleElementUp(at: index)
+                                        } label: {
+                                            Image(systemName: "chevron.up")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .disabled(index == 0)
+
+                                        Button {
+                                            moveSimpleElementDown(at: index)
+                                        } label: {
+                                            Image(systemName: "chevron.down")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .disabled(index == viewModel.config.plateSimpleElements.count - 1)
+                                    }
+                                    .foregroundStyle(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                            .onDrop(
+                                of: [UTType.text],
+                                delegate: SimplePlateRowDropDelegate(
+                                    targetKey: key,
+                                    draggedKey: $draggedPlateSimpleKey
+                                ) { source, target in
+                                    moveSimpleElement(source: source, target: target)
+                                }
+                            )
+                        }
+                    }
+                }
+                .frame(minHeight: 170, maxHeight: 220)
+            } else if viewModel.config.plateEditorMode == .custom {
                 Text("模板（占位符请用按钮插入）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -213,6 +289,7 @@ struct SimpleSettingsPanel: View {
                     plateTokenButton(title: "焦距", token: "{focal}")
                     plateTokenButton(title: "日期", token: "{date}")
                     plateTokenButton(title: "机型", token: "{camera}")
+                    plateTokenButton(title: "镜头", token: "{lens}")
                 }
 
                 HStack(spacing: 8) {
@@ -225,32 +302,27 @@ struct SimpleSettingsPanel: View {
                     .disabled(plateLiteralInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     Button("清空") {
                         viewModel.config.plateTemplateText = ""
-                        viewModel.config.plateContentPreset = .custom
                     }
                 }
+            } else {
+                Text("已关闭铭牌文字")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
 
     private var plateEditorModeBinding: Binding<PlateEditorMode> {
         Binding(
-            get: { viewModel.config.plateEditorMode },
+            get: {
+                viewModel.config.plateEnabled ? viewModel.config.plateEditorMode : .none
+            },
             set: { mode in
                 viewModel.config.plateEditorMode = mode
-                if mode == .simple, viewModel.config.plateContentPreset == .custom {
-                    viewModel.config.applyPlatePreset(.exposureWithFocal)
-                } else if mode == .custom {
-                    viewModel.config.plateContentPreset = .custom
+                viewModel.config.plateEnabled = mode != .none
+                if mode == .simple, viewModel.config.plateSimpleElements.isEmpty {
+                    viewModel.config.plateSimpleElements = PlateSimpleElement.default
                 }
-            }
-        )
-    }
-
-    private var platePresetBinding: Binding<PlateContentPreset> {
-        Binding(
-            get: { viewModel.config.plateContentPreset == .custom ? .exposureWithFocal : viewModel.config.plateContentPreset },
-            set: { preset in
-                viewModel.config.applyPlatePreset(preset)
             }
         )
     }
@@ -261,6 +333,59 @@ struct SimpleSettingsPanel: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+    }
+
+    private func draftBinding(for element: Binding<PlateSimpleElement>) -> Binding<String> {
+        Binding(
+            get: { plateSimpleDrafts[element.wrappedValue.key] ?? element.wrappedValue.templateText },
+            set: { plateSimpleDrafts[element.wrappedValue.key] = $0 }
+        )
+    }
+
+    private func commitPlateSimpleDraft(for key: PlateSimpleElementKey) {
+        guard let draft = plateSimpleDrafts[key] else { return }
+        guard let index = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == key }) else {
+            plateSimpleDrafts.removeValue(forKey: key)
+            return
+        }
+
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = trimmed.isEmpty ? key.defaultTemplatePart : trimmed
+        if viewModel.config.plateSimpleElements[index].templateText != resolved {
+            viewModel.config.plateSimpleElements[index].templateText = resolved
+        }
+        plateSimpleDrafts.removeValue(forKey: key)
+    }
+
+    private func commitAllPlateSimpleDrafts() {
+        for key in Array(plateSimpleDrafts.keys) {
+            commitPlateSimpleDraft(for: key)
+        }
+    }
+
+    private func moveSimpleElementUp(at index: Int) {
+        guard index > 0 else { return }
+        commitAllPlateSimpleDrafts()
+        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: index), to: index - 1)
+    }
+
+    private func moveSimpleElementDown(at index: Int) {
+        guard index < viewModel.config.plateSimpleElements.count - 1 else { return }
+        commitAllPlateSimpleDrafts()
+        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: index), to: index + 2)
+    }
+
+    private func moveSimpleElement(source: PlateSimpleElementKey, target: PlateSimpleElementKey) {
+        guard source != target else { return }
+        guard let fromIndex = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == source }),
+              let toIndex = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == target }) else {
+            return
+        }
+        guard fromIndex != toIndex else { return }
+
+        commitAllPlateSimpleDrafts()
+        let destination = fromIndex < toIndex ? toIndex + 1 : toIndex
+        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: fromIndex), to: destination)
     }
 
     private var resolutionBinding: Binding<ResolutionChoice> {
@@ -362,5 +487,25 @@ struct SimpleSettingsPanel: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct SimplePlateRowDropDelegate: DropDelegate {
+    let targetKey: PlateSimpleElementKey
+    @Binding var draggedKey: PlateSimpleElementKey?
+    let onMove: (PlateSimpleElementKey, PlateSimpleElementKey) -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedKey, draggedKey != targetKey else { return }
+        onMove(draggedKey, targetKey)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedKey = nil
+        return true
     }
 }

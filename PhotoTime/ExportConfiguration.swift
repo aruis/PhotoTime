@@ -61,11 +61,14 @@ enum FrameStylePreset: String, CaseIterable, Sendable {
 }
 
 enum PlateEditorMode: String, CaseIterable, Sendable {
+    case none
     case simple
     case custom
 
     var displayName: String {
         switch self {
+        case .none:
+            return "无"
         case .simple:
             return "简易"
         case .custom:
@@ -74,47 +77,64 @@ enum PlateEditorMode: String, CaseIterable, Sendable {
     }
 }
 
-enum PlateContentPreset: String, CaseIterable, Sendable {
-    case exposureTriad
-    case exposureWithFocal
-    case dateAndCamera
-    case custom
+enum PlateSimpleElementKey: String, CaseIterable, Codable, Sendable {
+    case camera
+    case lens
+    case shutter
+    case aperture
+    case iso
+    case focal
 
     var displayName: String {
         switch self {
-        case .exposureTriad:
-            return "曝光三要素"
-        case .exposureWithFocal:
-            return "曝光+焦距"
-        case .dateAndCamera:
-            return "日期+机型"
-        case .custom:
-            return "自定义"
+        case .camera:
+            return "相机"
+        case .lens:
+            return "镜头"
+        case .shutter:
+            return "快门"
+        case .aperture:
+            return "光圈"
+        case .iso:
+            return "ISO"
+        case .focal:
+            return "焦距"
         }
     }
 
-    var templateText: String {
+    var defaultTemplatePart: String {
         switch self {
-        case .exposureTriad:
-            return "S {shutter}   A {aperture}   ISO {iso}"
-        case .exposureWithFocal:
-            return PlateSettings.defaultTemplateText
-        case .dateAndCamera:
-            return "{date}   {camera}"
-        case .custom:
-            return PlateSettings.defaultTemplateText
+        case .camera:
+            return "{camera}"
+        case .lens:
+            return "{lens}"
+        case .shutter:
+            return "S {shutter}"
+        case .aperture:
+            return "A {aperture}"
+        case .iso:
+            return "ISO {iso}"
+        case .focal:
+            return "F {focal}"
         }
     }
+}
 
-    static func infer(from template: String) -> PlateContentPreset {
-        let normalized = template.trimmingCharacters(in: .whitespacesAndNewlines)
-        for preset in Self.allCases where preset != .custom {
-            if preset.templateText == normalized {
-                return preset
-            }
-        }
-        return .custom
-    }
+struct PlateSimpleElement: Codable, Sendable, Identifiable, Equatable {
+    var key: PlateSimpleElementKey
+    var enabled: Bool
+    var templateText: String
+
+    var id: String { key.rawValue }
+
+    static let `default`: [PlateSimpleElement] = [
+        .init(key: .camera, enabled: true, templateText: PlateSimpleElementKey.camera.defaultTemplatePart),
+        .init(key: .lens, enabled: true, templateText: PlateSimpleElementKey.lens.defaultTemplatePart),
+        .init(key: .shutter, enabled: true, templateText: PlateSimpleElementKey.shutter.defaultTemplatePart),
+        .init(key: .aperture, enabled: true, templateText: PlateSimpleElementKey.aperture.defaultTemplatePart),
+        .init(key: .iso, enabled: true, templateText: PlateSimpleElementKey.iso.defaultTemplatePart),
+        .init(key: .focal, enabled: true, templateText: PlateSimpleElementKey.focal.defaultTemplatePart)
+    ]
 }
 
 struct RenderEditorConfig: Sendable {
@@ -141,7 +161,7 @@ struct RenderEditorConfig: Sendable {
     var plateFontSize: Double = PlateSettings.default.fontSize
     var platePlacement: PlatePlacement = PlateSettings.default.placement
     var plateEditorMode: PlateEditorMode = .simple
-    var plateContentPreset: PlateContentPreset = .exposureWithFocal
+    var plateSimpleElements: [PlateSimpleElement] = PlateSimpleElement.default
     var plateTemplateText: String = PlateSettings.defaultTemplateText
     var prefetchRadius: Int = 1
     var prefetchMaxConcurrent: Int = 2
@@ -198,8 +218,8 @@ struct RenderEditorConfig: Sendable {
         plateFontSize = settings.plate.fontSize
         platePlacement = settings.plate.placement
         plateTemplateText = settings.plate.templateText
-        plateContentPreset = PlateContentPreset.infer(from: plateTemplateText)
-        plateEditorMode = plateContentPreset == .custom ? .custom : .simple
+        plateSimpleElements = PlateSimpleElement.default
+        plateEditorMode = plateEnabled ? .simple : .none
         prefetchRadius = settings.prefetchRadius
         prefetchMaxConcurrent = settings.prefetchMaxConcurrent
         audioEnabled = settings.audioTrack != nil
@@ -231,6 +251,7 @@ struct RenderEditorConfig: Sendable {
         plateFontSize = min(max(plateFontSize, Self.plateFontSizeRange.lowerBound), Self.plateFontSizeRange.upperBound)
         let trimmedTemplate = plateTemplateText.trimmingCharacters(in: .whitespacesAndNewlines)
         plateTemplateText = trimmedTemplate.isEmpty ? PlateSettings.defaultTemplateText : trimmedTemplate
+        plateSimpleElements = normalizedSimpleElements(from: plateSimpleElements)
         prefetchRadius = min(max(prefetchRadius, Self.prefetchRadiusRange.lowerBound), Self.prefetchRadiusRange.upperBound)
         prefetchMaxConcurrent = min(max(prefetchMaxConcurrent, Self.prefetchMaxConcurrentRange.lowerBound), Self.prefetchMaxConcurrentRange.upperBound)
         audioVolume = min(max(audioVolume, Self.audioVolumeRange.lowerBound), Self.audioVolumeRange.upperBound)
@@ -277,12 +298,12 @@ struct RenderEditorConfig: Sendable {
                 innerPadding: innerPadding
             ),
             plate: PlateSettings(
-                enabled: plateEnabled,
+                enabled: plateEnabled && plateEditorMode != .none,
                 height: plateHeight,
                 baselineOffset: plateBaselineOffset,
                 fontSize: plateFontSize,
                 placement: platePlacement,
-                templateText: plateTemplateText
+                templateText: plateEditorMode == .simple ? resolvedSimpleTemplateText : plateTemplateText
             ),
             canvas: resolvedCanvasSettings,
             audioTrack: resolvedAudioTrack
@@ -293,20 +314,12 @@ struct RenderEditorConfig: Sendable {
         renderSettings.template
     }
 
-    mutating func applyPlatePreset(_ preset: PlateContentPreset) {
-        plateContentPreset = preset
-        if preset != .custom {
-            plateTemplateText = preset.templateText
-        }
-    }
-
     mutating func insertPlateToken(_ token: String) {
         if plateTemplateText.isEmpty {
             plateTemplateText = token
         } else {
             plateTemplateText += " \(token)"
         }
-        plateContentPreset = .custom
     }
 
     mutating func appendPlateLiteral(_ text: String) {
@@ -317,7 +330,50 @@ struct RenderEditorConfig: Sendable {
         } else {
             plateTemplateText += " \(trimmed)"
         }
-        plateContentPreset = .custom
+    }
+
+    mutating func moveSimplePlateElements(from source: IndexSet, to destination: Int) {
+        var items = plateSimpleElements
+        let sortedSource = source.sorted()
+        let moving = sortedSource.map { items[$0] }
+        let removedBeforeDestination = sortedSource.filter { $0 < destination }.count
+        for index in sortedSource.reversed() {
+            items.remove(at: index)
+        }
+        let adjustedDestination = destination - removedBeforeDestination
+        let target = max(0, min(adjustedDestination, items.count))
+        items.insert(contentsOf: moving, at: target)
+        plateSimpleElements = items
+        plateSimpleElements = normalizedSimpleElements(from: plateSimpleElements)
+    }
+
+    private var resolvedSimpleTemplateText: String {
+        let parts = normalizedSimpleElements(from: plateSimpleElements)
+            .filter(\.enabled)
+            .map { element in
+                let trimmed = element.templateText.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? element.key.defaultTemplatePart : trimmed
+            }
+            .filter { !$0.isEmpty }
+        return parts.isEmpty ? PlateSimpleElementKey.camera.defaultTemplatePart : parts.joined(separator: "   ")
+    }
+
+    private func normalizedSimpleElements(from elements: [PlateSimpleElement]) -> [PlateSimpleElement] {
+        let baseByKey = Dictionary(uniqueKeysWithValues: PlateSimpleElement.default.map { ($0.key, $0) })
+        var seen = Set<PlateSimpleElementKey>()
+        var result: [PlateSimpleElement] = []
+
+        for element in elements {
+            guard !seen.contains(element.key), let fallback = baseByKey[element.key] else { continue }
+            seen.insert(element.key)
+            let text = element.templateText.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.append(.init(key: element.key, enabled: element.enabled, templateText: text.isEmpty ? fallback.templateText : text))
+        }
+
+        for fallback in PlateSimpleElement.default where !seen.contains(fallback.key) {
+            result.append(fallback)
+        }
+        return result
     }
 
     private var resolvedCanvasSettings: CanvasSettings {

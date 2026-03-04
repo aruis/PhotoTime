@@ -4,6 +4,7 @@ import ImageIO
 enum ExifParser {
     nonisolated static func parse(from properties: [CFString: Any]) -> ExifInfo {
         let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        let exifAux = properties[kCGImagePropertyExifAuxDictionary] as? [CFString: Any] ?? [:]
         let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
 
         let exposureTime = exif[kCGImagePropertyExifExposureTime] as? Double
@@ -12,6 +13,8 @@ enum ExifParser {
         let focalLength = exif[kCGImagePropertyExifFocalLength] as? Double
         let dateOriginal = exif[kCGImagePropertyExifDateTimeOriginal] as? String
         let cameraModel = tiff[kCGImagePropertyTIFFModel] as? String
+        let lensModel = formatCamera(exif[kCGImagePropertyExifLensModel] as? String)
+            ?? formatCamera(exifAux[kCGImagePropertyExifAuxLensModel] as? String)
 
         return ExifInfo(
             shutter: formatShutter(exposureTime),
@@ -19,7 +22,8 @@ enum ExifParser {
             iso: formatISO(isoArray?.first?.intValue),
             focalLength: formatFocalLength(focalLength),
             date: formatDate(dateOriginal),
-            camera: formatCamera(cameraModel)
+            camera: formatCamera(cameraModel),
+            lens: lensModel
         )
     }
 

@@ -36,7 +36,8 @@ struct ExifParserTests {
                 kCGImagePropertyExifFNumber: 4.0,
                 kCGImagePropertyExifISOSpeedRatings: [200],
                 kCGImagePropertyExifFocalLength: 50.0,
-                kCGImagePropertyExifDateTimeOriginal: "2026:03:03 12:00:00"
+                kCGImagePropertyExifDateTimeOriginal: "2026:03:03 12:00:00",
+                kCGImagePropertyExifLensModel: "XF23mmF2 R WR"
             ],
             kCGImagePropertyTIFFDictionary: [
                 kCGImagePropertyTIFFModel: "X100V"
@@ -44,9 +45,22 @@ struct ExifParserTests {
         ]
 
         let parsed = ExifParser.parse(from: properties)
-        let text = parsed.resolvedPlateText(template: "{camera} {date} S {shutter} A {aperture} ISO {iso} F {focal}")
+        let text = parsed.resolvedPlateText(template: "{camera}/{lens} {date} S {shutter} A {aperture} ISO {iso} F {focal}")
 
-        #expect(text == "X100V 2026-03-03 S 1/100s A f/4.0 ISO 200 F 50mm")
+        #expect(text == "X100V/XF23mmF2 R WR 2026-03-03 S 1/100s A f/4.0 ISO 200 F 50mm")
+    }
+
+    @Test
+    func lensModelFallsBackToExifAux() {
+        let properties: [CFString: Any] = [
+            kCGImagePropertyExifAuxDictionary: [
+                kCGImagePropertyExifAuxLensModel: "iPhone 26mm equivalent f/1.8"
+            ]
+        ]
+
+        let parsed = ExifParser.parse(from: properties)
+
+        #expect(parsed.lens == "iPhone 26mm equivalent f/1.8")
     }
 
     @Test

@@ -494,6 +494,7 @@ struct ExifInfo: Sendable {
     let focalLength: String?
     let date: String?
     let camera: String?
+    let lens: String?
 
     nonisolated var plateText: String {
         resolvedPlateText(template: PlateSettings.defaultTemplateText)
@@ -509,6 +510,7 @@ struct ExifInfo: Sendable {
             .replacingOccurrences(of: "{focal}", with: focalLength ?? "--")
             .replacingOccurrences(of: "{date}", with: date ?? "--")
             .replacingOccurrences(of: "{camera}", with: camera ?? "--")
+            .replacingOccurrences(of: "{lens}", with: lens ?? "--")
     }
 }
 
