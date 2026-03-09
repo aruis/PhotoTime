@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct SimpleSettingsPanel: View {
     @ObservedObject var viewModel: ExportViewModel
@@ -7,8 +6,8 @@ struct SimpleSettingsPanel: View {
     let onAudioDrop: ([NSItemProvider]) -> Bool
     @State private var plateLiteralInput = ""
     @State private var isPlateReordering = false
-    @State private var plateSimpleDrafts: [PlateSimpleElementKey: String] = [:]
-    @State private var draggedPlateSimpleKey: PlateSimpleElementKey?
+    @State private var plateSimplePrefixDrafts: [PlateSimpleElementKey: String] = [:]
+    @FocusState private var focusedPlatePrefixKey: PlateSimpleElementKey?
 
     private enum ResolutionChoice: Int, CaseIterable, Identifiable {
         case hd720
@@ -191,84 +190,113 @@ struct SimpleSettingsPanel: View {
             .pickerStyle(.segmented)
 
             if viewModel.config.plateEditorMode == .simple {
-                HStack {
-                    Text("铭牌内容")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(isPlateReordering ? "完成排序" : "排序") {
-                        commitAllPlateSimpleDrafts()
-                        isPlateReordering.toggle()
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("显示项目")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            commitAllPlateSimpleDrafts()
+                            isPlateReordering.toggle()
+                        } label: {
+                            Label(isPlateReordering ? "完成" : "排序", systemImage: isPlateReordering ? "checkmark" : "arrow.up.arrow.down")
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(Color.white.opacity(isPlateReordering ? 0.08 : 0.04))
+                                )
+                                .overlay(
+                                    Capsule(style: .continuous)
+                                        .strokeBorder(Color.white.opacity(isPlateReordering ? 0.12 : 0.06), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(isPlateReordering ? .primary : .secondary)
                     }
-                    .controlSize(.small)
-                }
-                ScrollView {
-                    VStack(spacing: 6) {
+
+                    List {
                         ForEach(viewModel.config.plateSimpleElements.indices, id: \.self) { index in
                             let key = viewModel.config.plateSimpleElements[index].key
-                            HStack(spacing: 8) {
-                                Toggle("", isOn: $viewModel.config.plateSimpleElements[index].enabled)
-                                    .labelsHidden()
-                                    .focusable(false)
-                                Text(key.displayName)
-                                    .frame(width: 72, alignment: .leading)
-                                TextField(
-                                    "",
-                                    text: draftBinding(for: $viewModel.config.plateSimpleElements[index]),
-                                    onEditingChanged: { editing in
-                                        if !editing {
-                                            commitPlateSimpleDraft(for: key)
-                                        }
-                                    },
-                                    onCommit: {
-                                        commitPlateSimpleDraft(for: key)
-                                    }
-                                )
-                                .textFieldStyle(.roundedBorder)
-                                .font(.system(.caption, design: .monospaced))
-                                .disabled(isPlateReordering)
-                                if isPlateReordering {
-                                    Image(systemName: "line.3.horizontal")
-                                        .foregroundStyle(.secondary)
-                                        .onDrag {
-                                            draggedPlateSimpleKey = key
-                                            return NSItemProvider(object: key.rawValue as NSString)
-                                        }
+                            let isEnabled = viewModel.config.plateSimpleElements[index].enabled
+                            GeometryReader { geometry in
+                                let inputWidth = max(96, geometry.size.width * 0.3)
 
-                                    HStack(spacing: 4) {
-                                        Button {
-                                            moveSimpleElementUp(at: index)
-                                        } label: {
-                                            Image(systemName: "chevron.up")
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .disabled(index == 0)
+                                HStack(spacing: 10) {
+                                    Toggle("", isOn: $viewModel.config.plateSimpleElements[index].enabled)
+                                        .labelsHidden()
+                                        .focusable(false)
 
-                                        Button {
-                                            moveSimpleElementDown(at: index)
-                                        } label: {
-                                            Image(systemName: "chevron.down")
+                                    Text(key.displayName)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(isEnabled ? .primary : .secondary)
+                                        .frame(width: 44, alignment: .leading)
+
+                                    Spacer(minLength: 0)
+
+                                    TextField(
+                                        "前缀",
+                                        text: prefixDraftBinding(for: $viewModel.config.plateSimpleElements[index]),
+                                        onEditingChanged: { editing in
+                                            if !editing {
+                                                commitPrefixDraft(for: key)
+                                            }
+                                        },
+                                        onCommit: {
+                                            commitPrefixDraft(for: key)
                                         }
-                                        .buttonStyle(.borderless)
-                                        .disabled(index == viewModel.config.plateSimpleElements.count - 1)
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .focused($focusedPlatePrefixKey, equals: key)
+                                    .frame(width: inputWidth, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(focusedPlatePrefixKey == key ? Color.white.opacity(0.06) : .clear)
+                                    )
+                                    .overlay(
+                                        Rectangle()
+                                            .fill(Color.white.opacity(focusedPlatePrefixKey == key ? 0.34 : (isEnabled ? 0.16 : 0.08)))
+                                            .frame(height: 1),
+                                        alignment: .bottom
+                                    )
+                                    .disabled(isPlateReordering)
+
+                                    if isPlateReordering {
+                                        Image(systemName: "line.3.horizontal")
+                                            .font(.caption)
+                                            .foregroundStyle(.tertiary)
                                     }
-                                    .foregroundStyle(.secondary)
                                 }
                             }
-                            .padding(.vertical, 2)
-                            .onDrop(
-                                of: [UTType.text],
-                                delegate: SimplePlateRowDropDelegate(
-                                    targetKey: key,
-                                    draggedKey: $draggedPlateSimpleKey
-                                ) { source, target in
-                                    moveSimpleElement(source: source, target: target)
-                                }
+                            .frame(height: 22)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color.white.opacity(isEnabled ? 0.035 : 0.015))
                             )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(isEnabled ? 0.06 : 0.03), lineWidth: 1)
+                            )
+                            .opacity(isEnabled ? 1 : 0.58)
+                            .animation(.easeInOut(duration: 0.12), value: isEnabled)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .moveDisabled(!isPlateReordering)
                         }
+                        .onMove(perform: moveSimpleElements)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .scrollIndicators(.hidden)
+                    .frame(height: plateSimpleListHeight)
                 }
-                .frame(minHeight: 170, maxHeight: 220)
             } else if viewModel.config.plateEditorMode == .custom {
                 Text("模板（占位符请用按钮插入）")
                     .font(.caption)
@@ -320,6 +348,9 @@ struct SimpleSettingsPanel: View {
             set: { mode in
                 viewModel.config.plateEditorMode = mode
                 viewModel.config.plateEnabled = mode != .none
+                if mode != .simple {
+                    isPlateReordering = false
+                }
                 if mode == .simple, viewModel.config.plateSimpleElements.isEmpty {
                     viewModel.config.plateSimpleElements = PlateSimpleElement.default
                 }
@@ -335,57 +366,40 @@ struct SimpleSettingsPanel: View {
         .controlSize(.small)
     }
 
-    private func draftBinding(for element: Binding<PlateSimpleElement>) -> Binding<String> {
+    private func prefixDraftBinding(for element: Binding<PlateSimpleElement>) -> Binding<String> {
         Binding(
-            get: { plateSimpleDrafts[element.wrappedValue.key] ?? element.wrappedValue.templateText },
-            set: { plateSimpleDrafts[element.wrappedValue.key] = $0 }
+            get: { plateSimplePrefixDrafts[element.wrappedValue.key] ?? element.wrappedValue.prefix },
+            set: { plateSimplePrefixDrafts[element.wrappedValue.key] = $0 }
         )
     }
 
-    private func commitPlateSimpleDraft(for key: PlateSimpleElementKey) {
-        guard let draft = plateSimpleDrafts[key] else { return }
+    private func commitPrefixDraft(for key: PlateSimpleElementKey) {
+        guard let draft = plateSimplePrefixDrafts[key] else { return }
         guard let index = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == key }) else {
-            plateSimpleDrafts.removeValue(forKey: key)
+            plateSimplePrefixDrafts.removeValue(forKey: key)
             return
         }
-
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolved = trimmed.isEmpty ? key.defaultTemplatePart : trimmed
-        if viewModel.config.plateSimpleElements[index].templateText != resolved {
-            viewModel.config.plateSimpleElements[index].templateText = resolved
-        }
-        plateSimpleDrafts.removeValue(forKey: key)
+        viewModel.config.plateSimpleElements[index].prefix = draft
+        plateSimplePrefixDrafts.removeValue(forKey: key)
     }
 
     private func commitAllPlateSimpleDrafts() {
-        for key in Array(plateSimpleDrafts.keys) {
-            commitPlateSimpleDraft(for: key)
+        for key in Array(plateSimplePrefixDrafts.keys) {
+            commitPrefixDraft(for: key)
         }
     }
 
-    private func moveSimpleElementUp(at index: Int) {
-        guard index > 0 else { return }
+    private func moveSimpleElements(from source: IndexSet, to destination: Int) {
         commitAllPlateSimpleDrafts()
-        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: index), to: index - 1)
+        viewModel.config.moveSimplePlateElements(from: source, to: destination)
     }
 
-    private func moveSimpleElementDown(at index: Int) {
-        guard index < viewModel.config.plateSimpleElements.count - 1 else { return }
-        commitAllPlateSimpleDrafts()
-        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: index), to: index + 2)
-    }
-
-    private func moveSimpleElement(source: PlateSimpleElementKey, target: PlateSimpleElementKey) {
-        guard source != target else { return }
-        guard let fromIndex = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == source }),
-              let toIndex = viewModel.config.plateSimpleElements.firstIndex(where: { $0.key == target }) else {
-            return
-        }
-        guard fromIndex != toIndex else { return }
-
-        commitAllPlateSimpleDrafts()
-        let destination = fromIndex < toIndex ? toIndex + 1 : toIndex
-        viewModel.config.moveSimplePlateElements(from: IndexSet(integer: fromIndex), to: destination)
+    private var plateSimpleListHeight: CGFloat {
+        let rowHeight: CGFloat = 44
+        let verticalSpacing: CGFloat = 4
+        let contentPadding: CGFloat = 4
+        let count = CGFloat(viewModel.config.plateSimpleElements.count)
+        return count * rowHeight + max(0, count - 1) * verticalSpacing + contentPadding
     }
 
     private var resolutionBinding: Binding<ResolutionChoice> {
@@ -487,25 +501,5 @@ struct SimpleSettingsPanel: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct SimplePlateRowDropDelegate: DropDelegate {
-    let targetKey: PlateSimpleElementKey
-    @Binding var draggedKey: PlateSimpleElementKey?
-    let onMove: (PlateSimpleElementKey, PlateSimpleElementKey) -> Void
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let draggedKey, draggedKey != targetKey else { return }
-        onMove(draggedKey, targetKey)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggedKey = nil
-        return true
     }
 }

@@ -345,7 +345,9 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
             String(format: "%.2f", config.plateFontSize),
             config.platePlacement.rawValue,
             config.plateEditorMode.rawValue,
-            config.plateSimpleElements.map { "\($0.key.rawValue):\($0.enabled ? 1 : 0):\($0.templateText)" }.joined(separator: ","),
+            config.plateSimpleElements.map {
+                "\($0.key.rawValue):\($0.enabled ? 1 : 0):\($0.prefix)"
+            }.joined(separator: ","),
             config.plateTemplateText,
             config.enableCrossfade ? "1" : "0",
             config.enableKenBurns ? "1" : "0",

@@ -102,39 +102,80 @@ enum PlateSimpleElementKey: String, CaseIterable, Codable, Sendable {
         }
     }
 
-    var defaultTemplatePart: String {
+    var token: String {
         switch self {
         case .camera:
             return "{camera}"
         case .lens:
             return "{lens}"
         case .shutter:
-            return "S {shutter}"
+            return "{shutter}"
         case .aperture:
-            return "A {aperture}"
+            return "{aperture}"
         case .iso:
-            return "ISO {iso}"
+            return "{iso}"
         case .focal:
-            return "F {focal}"
+            return "{focal}"
         }
+    }
+
+    var tokenLabel: String { rawValue }
+
+    var defaultPrefix: String {
+        switch self {
+        case .camera, .lens:
+            return ""
+        case .shutter:
+            return "S "
+        case .aperture:
+            return "A "
+        case .iso:
+            return "ISO "
+        case .focal:
+            return "F "
+        }
+    }
+
+    var defaultTemplatePart: String {
+        defaultPrefix + token
     }
 }
 
 struct PlateSimpleElement: Codable, Sendable, Identifiable, Equatable {
     var key: PlateSimpleElementKey
     var enabled: Bool
-    var templateText: String
+    var prefix: String
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case enabled
+        case prefix
+    }
 
     var id: String { key.rawValue }
 
+    var resolvedTemplatePart: String {
+        prefix.sanitizedPlateAffix + key.token
+    }
+
     static let `default`: [PlateSimpleElement] = [
-        .init(key: .camera, enabled: true, templateText: PlateSimpleElementKey.camera.defaultTemplatePart),
-        .init(key: .lens, enabled: true, templateText: PlateSimpleElementKey.lens.defaultTemplatePart),
-        .init(key: .shutter, enabled: true, templateText: PlateSimpleElementKey.shutter.defaultTemplatePart),
-        .init(key: .aperture, enabled: true, templateText: PlateSimpleElementKey.aperture.defaultTemplatePart),
-        .init(key: .iso, enabled: true, templateText: PlateSimpleElementKey.iso.defaultTemplatePart),
-        .init(key: .focal, enabled: true, templateText: PlateSimpleElementKey.focal.defaultTemplatePart)
+        .init(key: .camera, enabled: true),
+        .init(key: .lens, enabled: true),
+        .init(key: .shutter, enabled: true),
+        .init(key: .aperture, enabled: true),
+        .init(key: .iso, enabled: true),
+        .init(key: .focal, enabled: true)
     ]
+
+    init(
+        key: PlateSimpleElementKey,
+        enabled: Bool,
+        prefix: String? = nil
+    ) {
+        self.key = key
+        self.enabled = enabled
+        self.prefix = (prefix ?? key.defaultPrefix).sanitizedPlateAffix
+    }
 }
 
 struct RenderEditorConfig: Sendable {
@@ -350,10 +391,7 @@ struct RenderEditorConfig: Sendable {
     private var resolvedSimpleTemplateText: String {
         let parts = normalizedSimpleElements(from: plateSimpleElements)
             .filter(\.enabled)
-            .map { element in
-                let trimmed = element.templateText.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty ? element.key.defaultTemplatePart : trimmed
-            }
+            .map(\.resolvedTemplatePart)
             .filter { !$0.isEmpty }
         return parts.isEmpty ? PlateSimpleElementKey.camera.defaultTemplatePart : parts.joined(separator: "   ")
     }
@@ -364,10 +402,15 @@ struct RenderEditorConfig: Sendable {
         var result: [PlateSimpleElement] = []
 
         for element in elements {
-            guard !seen.contains(element.key), let fallback = baseByKey[element.key] else { continue }
+            guard !seen.contains(element.key), baseByKey[element.key] != nil else { continue }
             seen.insert(element.key)
-            let text = element.templateText.trimmingCharacters(in: .whitespacesAndNewlines)
-            result.append(.init(key: element.key, enabled: element.enabled, templateText: text.isEmpty ? fallback.templateText : text))
+            result.append(
+                .init(
+                    key: element.key,
+                    enabled: element.enabled,
+                    prefix: element.prefix
+                )
+            )
         }
 
         for fallback in PlateSimpleElement.default where !seen.contains(fallback.key) {
@@ -397,5 +440,12 @@ struct RenderEditorConfig: Sendable {
             volume: audioVolume,
             loopEnabled: audioLoopEnabled
         )
+    }
+}
+
+private extension String {
+    var sanitizedPlateAffix: String {
+        replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
     }
 }
