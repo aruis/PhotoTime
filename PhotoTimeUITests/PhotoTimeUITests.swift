@@ -77,18 +77,19 @@ final class PhotoTimeUITests: XCTestCase {
     }
 
     @MainActor
-    func testSuccessScenarioShowsSuccessCard() throws {
+    func testSuccessScenarioShowsSuccessSheet() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ui-test-scenario", "success"]
         app.launch()
 
-        XCTAssertTrue(app.buttons["success_open_output"].waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(elementByIdentifier(app, id: "success_sheet").waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["success_sheet_open_directory"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["success_sheet_open_log"].waitForExistence(timeout: uiTimeout))
         XCTAssertFalse(app.staticTexts["workflow_status_message"].exists)
     }
 
     @MainActor
-    func testFailureRecoveryActionCanReachSuccessCard() throws {
+    func testFailureRecoveryActionCanReachSuccessSheet() throws {
         let app = XCUIApplication()
         app.launchArguments += ["-ui-test-scenario", "failure_then_success"]
         app.launch()
@@ -97,8 +98,9 @@ final class PhotoTimeUITests: XCTestCase {
         XCTAssertTrue(retryButton.waitForExistence(timeout: uiTimeout))
         retryButton.tap()
 
-        XCTAssertTrue(app.buttons["success_open_output"].waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(elementByIdentifier(app, id: "success_sheet").waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["success_sheet_open_directory"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["success_sheet_open_log"].waitForExistence(timeout: uiTimeout))
     }
 
     @MainActor

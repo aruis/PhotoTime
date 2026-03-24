@@ -56,25 +56,30 @@ struct ExportSuccessSheet: View {
                 }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
+                    .accessibilityIdentifier("success_sheet_open_file")
                 Button {
                     onOpenOutputDirectory()
                 } label: {
                     Label("打开文件夹", systemImage: "folder")
                 }
+                .accessibilityIdentifier("success_sheet_open_directory")
                 if hasLog {
                     Button {
                         onOpenLog()
                     } label: {
                         Label("查看日志", systemImage: "doc.text")
                     }
+                    .accessibilityIdentifier("success_sheet_open_log")
                 }
                 Spacer(minLength: 0)
                 Button("完成") { dismiss() }
+                    .accessibilityIdentifier("success_sheet_done")
             }
             .controlSize(.regular)
         }
         .padding(20)
         .frame(minWidth: 420)
+        .accessibilityIdentifier("success_sheet")
     }
 
     private func successInfoRow(

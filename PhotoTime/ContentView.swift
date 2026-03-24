@@ -89,6 +89,7 @@ struct ContentView: View {
             .onAppear {
                 applyUITestOverridesIfNeeded()
                 applyPreviewModePolicy(for: centerPreviewTab)
+                presentSuccessSheetIfNeeded()
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
                 }
@@ -140,13 +141,8 @@ struct ContentView: View {
                     viewModel.generatePreview()
                 }
             }
-            .onChange(of: viewModel.workflow.state) { _, state in
-                guard state == .succeeded else { return }
-                guard let outputURL = viewModel.latestOutputURL ?? viewModel.outputURL else { return }
-                successSheetContext = SuccessSheetContext(
-                    outputURL: outputURL,
-                    logURL: viewModel.lastLogURL
-                )
+            .onChange(of: viewModel.statusMessage) { _, _ in
+                presentSuccessSheetIfNeeded()
             }
             .onDisappear {
                 viewModel.stopAudioPreview()
@@ -637,6 +633,18 @@ struct ContentView: View {
             return "未设置导出位置"
         }
         return (directoryURL.path as NSString).abbreviatingWithTildeInPath
+    }
+
+    private func presentSuccessSheetIfNeeded() {
+        guard viewModel.hasSuccessCard else { return }
+        guard let outputURL = viewModel.latestOutputURL ?? viewModel.outputURL else { return }
+        if successSheetContext?.outputURL == outputURL {
+            return
+        }
+        successSheetContext = SuccessSheetContext(
+            outputURL: outputURL,
+            logURL: viewModel.lastLogURL
+        )
     }
 
     private func preflightIssueExpandedBinding(for key: String) -> Binding<Bool> {
