@@ -42,8 +42,6 @@ struct AdvancedSettingsPanel: View {
                     settingsValidationView(settingsValidationMessage)
                 }
 
-                exportSummaryPanel
-
                 Stepper("宽: \(viewModel.config.outputWidth)", value: $viewModel.config.outputWidth, in: RenderEditorConfig.outputWidthRange, step: 2)
                     .disabled(viewModel.isBusy)
                 Stepper("高: \(viewModel.config.outputHeight)", value: $viewModel.config.outputHeight, in: RenderEditorConfig.outputHeightRange, step: 2)
@@ -172,48 +170,10 @@ struct AdvancedSettingsPanel: View {
         viewModel.validationMessage
     }
 
-    private var estimatedVideoDuration: Double {
-        viewModel.previewMaxSecond
-    }
-
-    private var audioSummaryMessage: String? {
-        guard viewModel.config.audioEnabled else { return nil }
-        guard let audioDuration = viewModel.selectedAudioDuration else {
-            return "音频时长尚未读取，导出前会再次校验。"
-        }
-        let videoDuration = estimatedVideoDuration
-        let audioText = String(format: "%.2f", audioDuration)
-        let videoText = String(format: "%.2f", videoDuration)
-        if viewModel.config.audioLoopEnabled {
-            return "音频 \(audioText)s，将循环覆盖约 \(videoText)s 视频。"
-        }
-        if audioDuration >= videoDuration {
-            return "音频 \(audioText)s，导出时会截断到视频时长 \(videoText)s。"
-        }
-        return "音频 \(audioText)s，结束后视频仍会继续到 \(videoText)s。"
-    }
-
     private var transitionValidationMessage: String? {
         guard viewModel.config.enableCrossfade else { return nil }
         guard viewModel.config.transitionDuration >= viewModel.config.imageDuration else { return nil }
         return "转场时长必须小于单图时长，请缩短转场或延长单图时长。"
-    }
-
-    private var exportSummaryPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("预计成片时长 \(estimatedVideoDuration, specifier: "%.2f")s")
-                .font(.caption.weight(.semibold))
-            Text("\(viewModel.imageURLs.count) 张图片 · \(viewModel.config.outputWidth)×\(viewModel.config.outputHeight) · \(viewModel.config.fps) FPS")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if let audioSummaryMessage {
-                Text(audioSummaryMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func resolutionPresetButton(_ preset: ResolutionPreset) -> some View {
@@ -298,6 +258,14 @@ struct AdvancedSettingsPanel: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        Button("恢复默认") {
+                            commitAllPlateSimpleDrafts()
+                            viewModel.config.resetSimplePlateElementsToDefault()
+                            isPlateReordering = false
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         Button {
                             commitAllPlateSimpleDrafts()
                             isPlateReordering.toggle()
@@ -404,11 +372,13 @@ struct AdvancedSettingsPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                TextEditor(text: $viewModel.config.plateTemplateText)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 88)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                customPlateTemplateEditor
+
+                Text("可用占位符：{camera} {lens} {shutter} {aperture} {iso} {focal} {date}")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                plateTemplatePreview
 
                 HStack(spacing: 6) {
                     plateTokenButton(title: "快门", token: "{shutter}")
@@ -422,6 +392,9 @@ struct AdvancedSettingsPanel: View {
 
                 HStack {
                     Spacer(minLength: 0)
+                    Button("恢复默认") {
+                        viewModel.config.resetPlateTemplateToDefault()
+                    }
                     Button("清空") {
                         viewModel.config.plateTemplateText = ""
                     }
@@ -475,6 +448,55 @@ struct AdvancedSettingsPanel: View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .font(.caption)
             .foregroundStyle(.red)
+    }
+
+    private var customPlateTemplateEditor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $viewModel.config.plateTemplateText)
+                .font(.system(.caption, design: .monospaced))
+                .frame(minHeight: 88)
+                .padding(8)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
+            if viewModel.config.plateTemplateText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(PlateSettings.defaultTemplateText)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var plateTemplatePreview: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("示例预览")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(samplePlatePreviewText)
+                .font(.system(.caption, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var samplePlatePreviewText: String {
+        sampleExif.resolvedPlateText(template: viewModel.config.plateTemplateText)
+    }
+
+    private var sampleExif: ExifInfo {
+        ExifInfo(
+            shutter: "1/125",
+            aperture: "2.8",
+            iso: "400",
+            focalLength: "35",
+            date: "2026-02-06",
+            camera: "Leica Q3",
+            lens: "Summilux 28"
+        )
     }
 
     private func commitPrefixDraft(for key: PlateSimpleElementKey) {

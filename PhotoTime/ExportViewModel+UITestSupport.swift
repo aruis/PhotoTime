@@ -74,6 +74,24 @@ extension ExportViewModel {
             previewImage = NSImage(size: CGSize(width: 320, height: 180))
             previewStatusMessage = "测试场景：预览已就绪"
             workflow.setIdleMessage("测试场景：可直接导出")
+        case "preflight_navigation":
+            imageURLs = [
+                URL(fileURLWithPath: "/tmp/plain-sample.jpg"),
+                URL(fileURLWithPath: "/tmp/review-sample.jpg")
+            ]
+            preflightReport = PreflightReport(
+                scannedCount: imageURLs.count,
+                issues: [
+                    PreflightIssue(
+                        index: 1,
+                        fileName: "review-sample.jpg",
+                        message: "测试场景：建议关注问题",
+                        severity: .shouldReview
+                    )
+                ]
+            )
+            fileListFilter = .mustFix
+            workflow.setIdleMessage("测试场景：验证预检定位与素材联动")
         default:
             break
         }

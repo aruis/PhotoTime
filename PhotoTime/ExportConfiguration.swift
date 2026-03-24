@@ -389,6 +389,14 @@ struct RenderEditorConfig: Sendable {
         }
     }
 
+    mutating func resetPlateTemplateToDefault() {
+        plateTemplateText = PlateSettings.defaultTemplateText
+    }
+
+    mutating func resetSimplePlateElementsToDefault() {
+        plateSimpleElements = PlateSimpleElement.default
+    }
+
     mutating func moveSimplePlateElements(from source: IndexSet, to destination: Int) {
         var items = plateSimpleElements
         let sortedSource = source.sorted()

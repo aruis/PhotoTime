@@ -3,6 +3,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    private struct SuccessSheetContext: Identifiable {
+        let id = UUID()
+        let outputURL: URL
+        let logURL: URL?
+    }
+
     enum LayoutMode {
         case app
         case workspaceOnly
@@ -56,6 +62,7 @@ struct ContentView: View {
     @State private var preflightPrioritizeMustFix = true
     @State private var preflightSecondaryActionsExpanded = false
     @State private var splitColumnVisibility: NavigationSplitViewVisibility = .all
+    @State private var successSheetContext: SuccessSheetContext?
 
     init() {
         _viewModel = StateObject(wrappedValue: ExportViewModel())
@@ -69,7 +76,18 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
+            .sheet(item: $successSheetContext) { context in
+                ExportSuccessSheet(
+                    filename: context.outputURL.lastPathComponent,
+                    directoryPath: (context.outputURL.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath,
+                    hasLog: context.logURL != nil,
+                    onOpenOutputFile: { viewModel.openLatestOutputFile() },
+                    onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
+                    onOpenLog: { viewModel.openLatestLog() }
+                )
+            }
             .onAppear {
+                applyUITestOverridesIfNeeded()
                 applyPreviewModePolicy(for: centerPreviewTab)
                 if centerPreviewTab == .singleFrame {
                     scheduleSingleFramePreview()
@@ -121,6 +139,14 @@ struct ContentView: View {
                 } else {
                     viewModel.generatePreview()
                 }
+            }
+            .onChange(of: viewModel.workflow.state) { _, state in
+                guard state == .succeeded else { return }
+                guard let outputURL = viewModel.latestOutputURL ?? viewModel.outputURL else { return }
+                successSheetContext = SuccessSheetContext(
+                    outputURL: outputURL,
+                    logURL: viewModel.lastLogURL
+                )
             }
             .onDisappear {
                 viewModel.stopAudioPreview()
@@ -277,6 +303,8 @@ struct ContentView: View {
                             } else {
                                 videoPreviewPanel
                             }
+
+                            previewOutputBar
                         } else {
                             emptyPreviewPanel
                         }
@@ -292,18 +320,15 @@ struct ContentView: View {
 
     private var rightSettingsColumn: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("参数设置", systemImage: "slider.horizontal.3")
-                    .font(.headline)
-                Text("调整画布、时长、转场和性能参数。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let outputURL = viewModel.outputURL {
-                    Text("输出: \(outputURL.lastPathComponent)")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Label("参数设置", systemImage: "slider.horizontal.3")
+                        .font(.headline)
+                    Spacer(minLength: 8)
                 }
+
+                settingsSummaryHeader
+
                 Picker("模式", selection: $settingsTab) {
                     ForEach(SettingsTab.allCases) { tab in
                         Text(tab.title).tag(tab)
@@ -318,7 +343,78 @@ struct ContentView: View {
             Divider()
             settingsPanel
         }
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(nsColor: .controlBackgroundColor),
+                    Color(nsColor: .windowBackgroundColor)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var settingsSummaryHeader: some View {
+        let durationText = String(format: "%.2f", viewModel.previewMaxSecond)
+        return VStack(alignment: .leading, spacing: 6) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    summaryChip("预计 \(durationText)s", emphasized: true)
+                    summaryChip("\(viewModel.imageURLs.count) 张图片")
+                    summaryChip("\(viewModel.config.outputWidth)×\(viewModel.config.outputHeight)")
+                    summaryChip("\(viewModel.config.fps) FPS")
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        summaryChip("预计 \(durationText)s", emphasized: true)
+                        summaryChip("\(viewModel.imageURLs.count) 张图片")
+                    }
+                    HStack(spacing: 6) {
+                        summaryChip("\(viewModel.config.outputWidth)×\(viewModel.config.outputHeight)")
+                        summaryChip("\(viewModel.config.fps) FPS")
+                    }
+                }
+            }
+
+            if let settingsAudioSummaryMessage {
+                Text(settingsAudioSummaryMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.bottom, 2)
+    }
+
+    private func summaryChip(_ title: String, emphasized: Bool = false) -> some View {
+        Text(title)
+            .font(emphasized ? .caption.weight(.semibold) : .caption)
+            .foregroundStyle(emphasized ? .primary : .secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(emphasized ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
+            )
+    }
+
+    private var settingsAudioSummaryMessage: String? {
+        guard viewModel.config.audioEnabled else { return nil }
+        guard let audioDuration = viewModel.selectedAudioDuration else {
+            return "音频时长尚未读取，导出前会再次校验。"
+        }
+        let videoDuration = viewModel.previewMaxSecond
+        let audioText = String(format: "%.2f", audioDuration)
+        let videoText = String(format: "%.2f", videoDuration)
+        if viewModel.config.audioLoopEnabled {
+            return "音频 \(audioText)s，将循环覆盖约 \(videoText)s 视频。"
+        }
+        if audioDuration >= videoDuration {
+            return "音频 \(audioText)s，导出时会截断到视频时长 \(videoText)s。"
+        }
+        return "音频 \(audioText)s，结束后视频仍会继续到 \(videoText)s。"
     }
 
     private var workflowPanel: some View {
@@ -360,19 +456,26 @@ struct ContentView: View {
 
     private var outputPathHintPanel: some View {
         HStack(spacing: 10) {
-            Image(systemName: "info.circle")
+            Image(systemName: "folder.badge.questionmark")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
-            Text("导出前请先选择导出路径。")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("未设置导出位置")
+                    .font(.callout.weight(.semibold))
+                Text("导出前请先选择保存位置。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Spacer(minLength: 0)
-            Button("选择导出路径") { viewModel.chooseOutput() }
+            Button("设置位置") { viewModel.chooseOutput() }
                 .controlSize(.small)
                 .disabled(!viewModel.actionAvailability.canSelectOutput)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var emptyPreviewPanel: some View {
@@ -414,16 +517,6 @@ struct ContentView: View {
                         hiddenCount: failedAssetHiddenCount
                     )
                 }
-            } else if viewModel.hasSuccessCard {
-                SuccessStatusCard(
-                    filename: viewModel.latestOutputFilename,
-                    logPath: viewModel.latestLogPath,
-                    isBusy: viewModel.isBusy,
-                    onExportAgain: { viewModel.export() },
-                    onOpenOutputFile: { viewModel.openLatestOutputFile() },
-                    onOpenOutputDirectory: { viewModel.openLatestOutputDirectory() },
-                    onOpenLog: { viewModel.openLatestLog() }
-                )
             } else if viewModel.validationMessage != nil {
                 WorkflowOverviewPanel(
                     statusMessage: viewModel.statusMessage,
@@ -489,12 +582,7 @@ struct ContentView: View {
         guard let primary = firstRunPrimaryAction else { return nil }
         switch primary.title {
         case "导出 MP4":
-            let count = viewModel.imageURLs.count
-            let assetText = count == 1 ? "1 张图片" : "\(count) 张图片"
-            if let outputURL = viewModel.outputURL {
-                return "\(assetText) · 输出到 \(outputURL.lastPathComponent)"
-            }
-            return "\(assetText) · 请先选择导出路径"
+            return viewModel.outputURL == nil ? "请先选择导出路径" : nil
         case "导入图片":
             return "从本地选择素材，开始生成视频"
         case "可选：生成预览":
@@ -502,6 +590,53 @@ struct ContentView: View {
         default:
             return nil
         }
+    }
+
+    @ViewBuilder
+    private var previewOutputBar: some View {
+        if viewModel.hasSelectedImages {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: previewOutputDirectoryURL == nil ? "folder.badge.questionmark" : "folder.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(previewOutputDirectoryURL == nil ? Color.secondary : Color.accentColor)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(previewOutputDirectoryURL == nil ? "导出位置" : "导出目录")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(previewOutputDirectoryText)
+                        .font(.callout.weight(previewOutputDirectoryURL == nil ? .regular : .semibold))
+                        .foregroundStyle(previewOutputDirectoryURL == nil ? .secondary : .primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .textSelection(.enabled)
+                }
+
+                Spacer(minLength: 0)
+
+                Button("设置位置") { viewModel.chooseOutput() }
+                    .controlSize(.small)
+                    .disabled(!viewModel.actionAvailability.canSelectOutput)
+
+                Button("打开文件夹") { viewModel.openLatestOutputDirectory() }
+                    .controlSize(.small)
+                    .disabled(previewOutputDirectoryURL == nil)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private var previewOutputDirectoryURL: URL? {
+        viewModel.outputURL?.deletingLastPathComponent()
+    }
+
+    private var previewOutputDirectoryText: String {
+        guard let directoryURL = previewOutputDirectoryURL else {
+            return "未设置导出位置"
+        }
+        return (directoryURL.path as NSString).abbreviatingWithTildeInPath
     }
 
     private func preflightIssueExpandedBinding(for key: String) -> Binding<Bool> {
@@ -598,6 +733,18 @@ struct ContentView: View {
             viewModel.setTimelinePreviewEnabled(true)
             viewModel.setAutoPreviewRefreshEnabled(true)
         }
+    }
+
+    private func applyUITestOverridesIfNeeded() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flagIndex = arguments.firstIndex(of: "-ui-test-scenario"), arguments.indices.contains(flagIndex + 1) else {
+            return
+        }
+        if arguments[flagIndex + 1] == "preflight_navigation" {
+            preflightSecondaryActionsExpanded = true
+        }
+        #endif
     }
 
     private var previewPanel: some View {

@@ -37,6 +37,7 @@ struct PreflightPanel: View {
                     .padding(.top, 2)
                 }
                 .font(.caption)
+                .accessibilityIdentifier("preflight_expand_all")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
@@ -91,6 +92,7 @@ struct PreflightPanel: View {
                 }
                 .controlSize(.small)
                 .disabled(viewModel.isBusy)
+                .accessibilityIdentifier("preflight_locate_first_issue")
             }
         }
     }
@@ -245,6 +247,7 @@ struct PreflightPanel: View {
                 .font(.caption)
                 .controlSize(.small)
                 .disabled(viewModel.isBusy)
+                .accessibilityIdentifier("preflight_locate_\(accessibilityToken(for: issue.fileName))")
 
                 Button(viewModel.isIssueIgnored(issue) ? "恢复" : "忽略") {
                     viewModel.toggleIgnoreIssue(issue)
@@ -267,6 +270,8 @@ struct PreflightPanel: View {
                 .stroke(isSelectedAssetIssue ? Color.accentColor.opacity(0.55) : .clear, lineWidth: 1.2)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityIdentifier("preflight_issue_\(accessibilityToken(for: issue.fileName))")
+        .accessibilityValue(isSelectedAssetIssue ? "selected" : "idle")
     }
 
     private func summaryBadge(title: String, count: Int, tint: Color) -> some View {
@@ -281,5 +286,9 @@ struct PreflightPanel: View {
         .background(tint.opacity(0.15))
         .foregroundStyle(tint)
         .clipShape(Capsule())
+    }
+
+    private func accessibilityToken(for value: String) -> String {
+        value.replacingOccurrences(of: "[^A-Za-z0-9]+", with: "_", options: .regularExpression)
     }
 }

@@ -106,8 +106,6 @@ struct SimpleSettingsPanel: View {
                     settingsValidationView(settingsValidationMessage)
                 }
 
-                exportSummaryPanel
-
                 Picker("分辨率", selection: resolutionBinding) {
                     ForEach(ResolutionChoice.allCases) { choice in
                         Text(choice.title).tag(choice)
@@ -205,27 +203,6 @@ struct SimpleSettingsPanel: View {
         viewModel.validationMessage
     }
 
-    private var estimatedVideoDuration: Double {
-        viewModel.previewMaxSecond
-    }
-
-    private var audioSummaryMessage: String? {
-        guard viewModel.config.audioEnabled else { return nil }
-        guard let audioDuration = viewModel.selectedAudioDuration else {
-            return "音频时长尚未读取，导出前会再次校验。"
-        }
-        let videoDuration = estimatedVideoDuration
-        let audioText = String(format: "%.2f", audioDuration)
-        let videoText = String(format: "%.2f", videoDuration)
-        if viewModel.config.audioLoopEnabled {
-            return "音频 \(audioText)s，将循环覆盖约 \(videoText)s 视频。"
-        }
-        if audioDuration >= videoDuration {
-            return "音频 \(audioText)s，导出时会截断到视频时长 \(videoText)s。"
-        }
-        return "音频 \(audioText)s，结束后视频仍会继续到 \(videoText)s。"
-    }
-
     private var plateContentEditor: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("铭牌编辑", selection: plateEditorModeBinding) {
@@ -253,6 +230,14 @@ struct SimpleSettingsPanel: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
+                        Button("恢复默认") {
+                            commitAllPlateSimpleDrafts()
+                            viewModel.config.resetSimplePlateElementsToDefault()
+                            isPlateReordering = false
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         Button {
                             commitAllPlateSimpleDrafts()
                             isPlateReordering.toggle()
@@ -359,11 +344,13 @@ struct SimpleSettingsPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                TextEditor(text: $viewModel.config.plateTemplateText)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 88)
-                    .padding(8)
-                    .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                customPlateTemplateEditor
+
+                Text("可用占位符：{camera} {lens} {shutter} {aperture} {iso} {focal} {date}")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                plateTemplatePreview
 
                 HStack(spacing: 6) {
                     plateTokenButton(title: "快门", token: "{shutter}")
@@ -377,6 +364,9 @@ struct SimpleSettingsPanel: View {
 
                 HStack {
                     Spacer(minLength: 0)
+                    Button("恢复默认") {
+                        viewModel.config.resetPlateTemplateToDefault()
+                    }
                     Button("清空") {
                         viewModel.config.plateTemplateText = ""
                     }
@@ -432,21 +422,53 @@ struct SimpleSettingsPanel: View {
             .foregroundStyle(.red)
     }
 
-    private var exportSummaryPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("预计成片时长 \(estimatedVideoDuration, specifier: "%.2f")s")
-                .font(.caption.weight(.semibold))
-            Text("\(viewModel.imageURLs.count) 张图片 · \(viewModel.config.outputWidth)×\(viewModel.config.outputHeight) · \(viewModel.config.fps) FPS")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            if let audioSummaryMessage {
-                Text(audioSummaryMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+    private var customPlateTemplateEditor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $viewModel.config.plateTemplateText)
+                .font(.system(.caption, design: .monospaced))
+                .frame(minHeight: 88)
+                .padding(8)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+
+            if viewModel.config.plateTemplateText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(PlateSettings.defaultTemplateText)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .allowsHitTesting(false)
             }
         }
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var plateTemplatePreview: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("示例预览")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(samplePlatePreviewText)
+                .font(.system(.caption, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private var samplePlatePreviewText: String {
+        sampleExif.resolvedPlateText(template: viewModel.config.plateTemplateText)
+    }
+
+    private var sampleExif: ExifInfo {
+        ExifInfo(
+            shutter: "1/125",
+            aperture: "2.8",
+            iso: "400",
+            focalLength: "35",
+            date: "2026-02-06",
+            camera: "Leica Q3",
+            lens: "Summilux 28"
+        )
     }
 
     private func commitPrefixDraft(for key: PlateSimpleElementKey) {

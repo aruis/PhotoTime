@@ -124,6 +124,26 @@ final class PhotoTimeUITests: XCTestCase {
     }
 
     @MainActor
+    func testPreflightLocateSwitchesBackToAllAssetsAndFocusesTarget() throws {
+        let app = XCUIApplication()
+        app.launchArguments += ["-ui-test-scenario", "preflight_navigation"]
+        app.launch()
+
+        let locateFirstIssue = elementByIdentifier(app, id: "preflight_locate_first_issue")
+        XCTAssertTrue(locateFirstIssue.waitForExistence(timeout: uiTimeout))
+        locateFirstIssue.tap()
+
+        let plainAsset = elementByIdentifier(app, id: "asset_card_plain_sample_jpg")
+        let reviewAsset = elementByIdentifier(app, id: "asset_card_review_sample_jpg")
+        let reviewIssue = elementByIdentifier(app, id: "preflight_issue_review_sample_jpg")
+
+        XCTAssertTrue(plainAsset.waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(reviewAsset.waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(["selected", "focused"].contains(reviewAsset.value as? String))
+        XCTAssertEqual(reviewIssue.value as? String, "selected")
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {

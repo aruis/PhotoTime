@@ -160,6 +160,8 @@ struct AssetSidebarPanel: View {
         .frame(height: cardHeight, alignment: .top)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .clipped()
+        .accessibilityIdentifier("asset_card_\(accessibilityToken(for: fileName))")
+        .accessibilityValue(isFocused ? "focused" : (isSelected ? "selected" : "idle"))
         .onTapGesture {
             handleAssetTap(url)
         }
@@ -364,5 +366,9 @@ struct AssetSidebarPanel: View {
     private var shouldHandleGlobalShortcut: Bool {
         guard let responder = NSApp.keyWindow?.firstResponder else { return true }
         return !(responder is NSTextView)
+    }
+
+    private func accessibilityToken(for value: String) -> String {
+        value.replacingOccurrences(of: "[^A-Za-z0-9]+", with: "_", options: .regularExpression)
     }
 }
