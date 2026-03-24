@@ -4,7 +4,6 @@ struct SimpleSettingsPanel: View {
     @ObservedObject var viewModel: ExportViewModel
     @Binding var isAudioDropTarget: Bool
     let onAudioDrop: ([NSItemProvider]) -> Bool
-    @State private var plateLiteralInput = ""
     @State private var isPlateReordering = false
     @State private var plateSimplePrefixDrafts: [PlateSimpleElementKey: String] = [:]
     @FocusState private var focusedPlatePrefixKey: PlateSimpleElementKey?
@@ -80,6 +79,22 @@ struct SimpleSettingsPanel: View {
             case .off: return 0
             case .soft: return 0.4
             case .standard: return 0.8
+            }
+        }
+    }
+
+    private enum PlateFontSizeChoice: Int, CaseIterable, Identifiable {
+        case small = 22
+        case medium = 26
+        case large = 32
+
+        var id: Int { rawValue }
+
+        var title: String {
+            switch self {
+            case .small: return "小"
+            case .medium: return "中"
+            case .large: return "大"
             }
         }
     }
@@ -189,7 +204,18 @@ struct SimpleSettingsPanel: View {
             }
             .pickerStyle(.segmented)
 
-            if viewModel.config.plateEditorMode == .simple {
+            if effectivePlateEditorMode == .simple {
+                Picker("字号", selection: plateFontSizeChoiceBinding) {
+                    ForEach(PlateFontSizeChoice.allCases) { choice in
+                        Text(choice.title).tag(choice)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } else if effectivePlateEditorMode == .custom {
+                customPlateFontSizeControl
+            }
+
+            if effectivePlateEditorMode == .simple {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("显示项目")
@@ -297,17 +323,15 @@ struct SimpleSettingsPanel: View {
                     .scrollIndicators(.hidden)
                     .frame(height: plateSimpleListHeight)
                 }
-            } else if viewModel.config.plateEditorMode == .custom {
-                Text("模板（占位符请用按钮插入）")
+            } else if effectivePlateEditorMode == .custom {
+                Text("模板（可直接编辑，占位符可用按钮插入）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text(viewModel.config.plateTemplateText)
+                TextEditor(text: $viewModel.config.plateTemplateText)
                     .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    .frame(minHeight: 88)
+                    .padding(8)
                     .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
                 HStack(spacing: 6) {
@@ -320,14 +344,8 @@ struct SimpleSettingsPanel: View {
                     plateTokenButton(title: "镜头", token: "{lens}")
                 }
 
-                HStack(spacing: 8) {
-                    TextField("追加文字", text: $plateLiteralInput)
-                        .textFieldStyle(.roundedBorder)
-                    Button("追加") {
-                        viewModel.config.appendPlateLiteral(plateLiteralInput)
-                        plateLiteralInput = ""
-                    }
-                    .disabled(plateLiteralInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                HStack {
+                    Spacer(minLength: 0)
                     Button("清空") {
                         viewModel.config.plateTemplateText = ""
                     }
@@ -343,7 +361,7 @@ struct SimpleSettingsPanel: View {
     private var plateEditorModeBinding: Binding<PlateEditorMode> {
         Binding(
             get: {
-                viewModel.config.plateEnabled ? viewModel.config.plateEditorMode : .none
+                effectivePlateEditorMode
             },
             set: { mode in
                 viewModel.config.plateEditorMode = mode
@@ -356,6 +374,10 @@ struct SimpleSettingsPanel: View {
                 }
             }
         )
+    }
+
+    private var effectivePlateEditorMode: PlateEditorMode {
+        viewModel.config.plateEnabled ? viewModel.config.plateEditorMode : .none
     }
 
     private func plateTokenButton(title: String, token: String) -> some View {
@@ -400,6 +422,57 @@ struct SimpleSettingsPanel: View {
         let contentPadding: CGFloat = 4
         let count = CGFloat(viewModel.config.plateSimpleElements.count)
         return count * rowHeight + max(0, count - 1) * verticalSpacing + contentPadding
+    }
+
+    private var plateFontSizeChoiceBinding: Binding<PlateFontSizeChoice> {
+        Binding(
+            get: {
+                let size = viewModel.config.plateFontSize
+                return PlateFontSizeChoice.allCases.min(by: {
+                    abs(Double($0.rawValue) - size) < abs(Double($1.rawValue) - size)
+                }) ?? .medium
+            },
+            set: { choice in
+                viewModel.config.plateFontSize = Double(choice.rawValue)
+            }
+        )
+    }
+
+    private var customPlateFontSizeControl: some View {
+        LabeledContent("字号") {
+            HStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    TextField(
+                        "",
+                        value: $viewModel.config.plateFontSize,
+                        format: .number.precision(.fractionLength(0...1))
+                    )
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 44)
+
+                    Text("点")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10, alignment: .leading)
+                }
+                .frame(width: 78, height: 28)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+                )
+
+                Stepper("", value: $viewModel.config.plateFontSize, in: RenderEditorConfig.plateFontSizeRange, step: 0.5)
+                    .labelsHidden()
+                    .controlSize(.small)
+            }
+            .frame(minHeight: 28)
+        }
     }
 
     private var resolutionBinding: Binding<ResolutionChoice> {

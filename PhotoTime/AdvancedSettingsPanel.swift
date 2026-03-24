@@ -4,7 +4,6 @@ struct AdvancedSettingsPanel: View {
     @ObservedObject var viewModel: ExportViewModel
     @Binding var isAudioDropTarget: Bool
     let onAudioDrop: ([NSItemProvider]) -> Bool
-    @State private var plateLiteralInput = ""
     @State private var isPlateReordering = false
     @State private var plateSimplePrefixDrafts: [PlateSimpleElementKey: String] = [:]
     @FocusState private var focusedPlatePrefixKey: PlateSimpleElementKey?
@@ -133,7 +132,45 @@ struct AdvancedSettingsPanel: View {
             }
             .pickerStyle(.segmented)
 
-            if viewModel.config.plateEditorMode == .simple {
+            if effectivePlateEditorMode != .none {
+                HStack(spacing: 10) {
+                    Text("字号")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    HStack(spacing: 0) {
+                        TextField(
+                            "字号",
+                            value: $viewModel.config.plateFontSize,
+                            format: .number.precision(.fractionLength(0...1))
+                        )
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 54)
+
+                        Text("点")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 6)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.secondary.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+                    )
+
+                    Stepper("", value: $viewModel.config.plateFontSize, in: RenderEditorConfig.plateFontSizeRange, step: 0.5)
+                        .labelsHidden()
+                        .controlSize(.small)
+                }
+            }
+
+            if effectivePlateEditorMode == .simple {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("显示项目")
@@ -241,17 +278,15 @@ struct AdvancedSettingsPanel: View {
                     .scrollIndicators(.hidden)
                     .frame(height: plateSimpleListHeight)
                 }
-            } else if viewModel.config.plateEditorMode == .custom {
-                Text("模板（占位符请用按钮插入）")
+            } else if effectivePlateEditorMode == .custom {
+                Text("模板（可直接编辑，占位符可用按钮插入）")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text(viewModel.config.plateTemplateText)
+                TextEditor(text: $viewModel.config.plateTemplateText)
                     .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    .frame(minHeight: 88)
+                    .padding(8)
                     .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
 
                 HStack(spacing: 6) {
@@ -264,14 +299,8 @@ struct AdvancedSettingsPanel: View {
                     plateTokenButton(title: "镜头", token: "{lens}")
                 }
 
-                HStack(spacing: 8) {
-                    TextField("追加文字", text: $plateLiteralInput)
-                        .textFieldStyle(.roundedBorder)
-                    Button("追加") {
-                        viewModel.config.appendPlateLiteral(plateLiteralInput)
-                        plateLiteralInput = ""
-                    }
-                    .disabled(plateLiteralInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                HStack {
+                    Spacer(minLength: 0)
                     Button("清空") {
                         viewModel.config.plateTemplateText = ""
                     }
@@ -287,7 +316,7 @@ struct AdvancedSettingsPanel: View {
     private var plateEditorModeBinding: Binding<PlateEditorMode> {
         Binding(
             get: {
-                viewModel.config.plateEnabled ? viewModel.config.plateEditorMode : .none
+                effectivePlateEditorMode
             },
             set: { mode in
                 viewModel.config.plateEditorMode = mode
@@ -300,6 +329,10 @@ struct AdvancedSettingsPanel: View {
                 }
             }
         )
+    }
+
+    private var effectivePlateEditorMode: PlateEditorMode {
+        viewModel.config.plateEnabled ? viewModel.config.plateEditorMode : .none
     }
 
     private func plateTokenButton(title: String, token: String) -> some View {

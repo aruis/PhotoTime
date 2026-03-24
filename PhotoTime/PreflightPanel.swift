@@ -2,7 +2,8 @@ import SwiftUI
 
 struct PreflightPanel: View {
     @ObservedObject var viewModel: ExportViewModel
-    let displayIssues: [PreflightIssue]
+    let compactIssues: [PreflightIssue]
+    let allDisplayIssues: [PreflightIssue]
     let filteredIgnoredIssues: [PreflightIssue]
     let onSelectAsset: (URL) -> Void
     let expansionBindingForKey: (String) -> Binding<Bool>
@@ -81,7 +82,7 @@ struct PreflightPanel: View {
 
             Spacer(minLength: 0)
 
-            if let first = displayIssues.first {
+            if let first = allDisplayIssues.first {
                 Button("定位首个问题") {
                     if let url = viewModel.focusAssetForIssue(first) {
                         onSelectAsset(url)
@@ -95,10 +96,10 @@ struct PreflightPanel: View {
 
     private var compactIssuePreview: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let first = displayIssues.first {
+            if let first = compactIssues.first {
                 issueRow(first)
 
-                let hiddenCount = max(0, displayIssues.count - 1)
+                let hiddenCount = max(0, allDisplayIssues.count - compactIssues.count)
                 if hiddenCount > 0 {
                     Text("另有 \(hiddenCount) 项问题，展开“查看全部问题与筛选”可处理。")
                         .font(.caption2)
@@ -136,13 +137,13 @@ struct PreflightPanel: View {
 
     private var issueListSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if displayIssues.isEmpty {
+            if allDisplayIssues.isEmpty {
                 Text("当前筛选下没有问题项。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
             } else {
-                ForEach(displayIssues, id: \.ignoreKey) { issue in
+                ForEach(allDisplayIssues, id: \.ignoreKey) { issue in
                     issueRow(issue)
                 }
             }
@@ -153,14 +154,14 @@ struct PreflightPanel: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 Button("展开全部") {
-                    expandedPreflightIssueKeys.formUnion(displayIssues.map(\.ignoreKey))
+                    expandedPreflightIssueKeys.formUnion(allDisplayIssues.map(\.ignoreKey))
                 }
-                .disabled(displayIssues.isEmpty)
+                .disabled(allDisplayIssues.isEmpty)
 
                 Button("收起全部") {
-                    expandedPreflightIssueKeys.subtract(displayIssues.map(\.ignoreKey))
+                    expandedPreflightIssueKeys.subtract(allDisplayIssues.map(\.ignoreKey))
                 }
-                .disabled(displayIssues.isEmpty)
+                .disabled(allDisplayIssues.isEmpty)
             }
             .controlSize(.small)
 

@@ -334,7 +334,8 @@ struct ContentView: View {
             if let report = viewModel.preflightReport, !report.issues.isEmpty {
                 PreflightPanel(
                     viewModel: viewModel,
-                    displayIssues: preflightDisplayIssues(report: report),
+                    compactIssues: preflightDisplayIssues(report: report),
+                    allDisplayIssues: preflightIssuesForDisplay(report: report),
                     filteredIgnoredIssues: filteredIgnoredIssues,
                     onSelectAsset: { selectedAssetURL = $0 },
                     expansionBindingForKey: { key in preflightIssueExpandedBinding(for: key) },
