@@ -83,8 +83,8 @@ final class PhotoTimeUITests: XCTestCase {
         app.launch()
 
         XCTAssertTrue(elementByIdentifier(app, id: "success_sheet").waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_sheet_open_directory"].waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_sheet_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["打开文件夹"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["查看日志"].waitForExistence(timeout: uiTimeout))
         XCTAssertFalse(app.staticTexts["workflow_status_message"].exists)
     }
 
@@ -99,8 +99,8 @@ final class PhotoTimeUITests: XCTestCase {
         retryButton.tap()
 
         XCTAssertTrue(elementByIdentifier(app, id: "success_sheet").waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_sheet_open_directory"].waitForExistence(timeout: uiTimeout))
-        XCTAssertTrue(app.buttons["success_sheet_open_log"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["打开文件夹"].waitForExistence(timeout: uiTimeout))
+        XCTAssertTrue(app.buttons["查看日志"].waitForExistence(timeout: uiTimeout))
     }
 
     @MainActor
