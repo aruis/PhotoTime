@@ -18,8 +18,8 @@ struct PreflightPanel: View {
 
     var body: some View {
         GroupBox("导出前检查") {
-            VStack(alignment: .leading, spacing: 12) {
-                preflightSummaryRow
+            VStack(alignment: .leading, spacing: 14) {
+                preflightHeader
                 compactActionsRow
                 compactIssuePreview
 
@@ -44,24 +44,45 @@ struct PreflightPanel: View {
         }
     }
 
-    private var preflightSummaryRow: some View {
-        HStack(spacing: 8) {
-            summaryBadge(
-                title: "必须修复",
-                count: viewModel.preflightReport?.blockingIssues.count ?? 0,
-                tint: .red
-            )
-            summaryBadge(
-                title: "建议关注",
-                count: viewModel.preflightReport?.reviewIssues.count ?? 0,
-                tint: .orange
-            )
-            summaryBadge(
-                title: "已忽略",
-                count: viewModel.ignoredIssueCount,
-                tint: .secondary
-            )
-            Spacer(minLength: 0)
+    private var preflightHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "checklist.checked")
+                    .font(.title3)
+                    .foregroundStyle(preflightHeaderTint)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preflightHeaderTitle)
+                        .font(.headline)
+                    Text(preflightHeaderSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(preflightHeaderTint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            HStack(spacing: 8) {
+                summaryBadge(
+                    title: "必须修复",
+                    count: viewModel.preflightReport?.blockingIssues.count ?? 0,
+                    tint: .red
+                )
+                summaryBadge(
+                    title: "建议关注",
+                    count: viewModel.preflightReport?.reviewIssues.count ?? 0,
+                    tint: .orange
+                )
+                summaryBadge(
+                    title: "已忽略",
+                    count: viewModel.ignoredIssueCount,
+                    tint: .secondary
+                )
+                Spacer(minLength: 0)
+            }
         }
     }
 
@@ -95,6 +116,9 @@ struct PreflightPanel: View {
                 .accessibilityIdentifier("preflight_locate_first_issue")
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var compactIssuePreview: some View {
@@ -151,6 +175,8 @@ struct PreflightPanel: View {
                 }
             }
         }
+        .padding(12)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var secondaryOptionsPanel: some View {
@@ -286,6 +312,36 @@ struct PreflightPanel: View {
         .background(tint.opacity(0.15))
         .foregroundStyle(tint)
         .clipShape(Capsule())
+    }
+
+    private var preflightHeaderTint: Color {
+        if viewModel.hasBlockingPreflightIssues {
+            return .orange
+        }
+        if allDisplayIssues.isEmpty {
+            return .green
+        }
+        return .accentColor
+    }
+
+    private var preflightHeaderTitle: String {
+        if viewModel.hasBlockingPreflightIssues {
+            return "发现需要先处理的问题"
+        }
+        if allDisplayIssues.isEmpty {
+            return "当前没有待处理问题"
+        }
+        return "预检已发现可继续关注的项目"
+    }
+
+    private var preflightHeaderSubtitle: String {
+        if viewModel.hasBlockingPreflightIssues {
+            return "建议先定位并处理必须修复项，再继续导出。"
+        }
+        if allDisplayIssues.isEmpty {
+            return "当前筛选下没有导出风险，可以继续后续操作。"
+        }
+        return "当前可以继续导出，但建议先查看这些提示项。"
     }
 
     private func accessibilityToken(for value: String) -> String {

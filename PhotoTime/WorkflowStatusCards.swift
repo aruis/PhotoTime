@@ -118,14 +118,35 @@ struct WorkflowOverviewPanel: View {
 
     var body: some View {
         GroupBox("流程状态") {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(statusMessage)
-                    .font(.callout)
-                    .accessibilityIdentifier("workflow_status_message")
-                Text(nextActionHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("flow_next_hint")
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "point.bottomleft.forward.to.point.topright.scurvepath.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.accentColor)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("当前流程进度")
+                            .font(.headline)
+                        Text(nextActionHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("flow_next_hint")
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                workflowInfoRow(
+                    systemImage: "text.alignleft",
+                    title: "当前状态",
+                    value: statusMessage,
+                    emphasized: true
+                )
+                .padding(14)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 if let firstRunPrimaryActionTitle {
                     HStack {
@@ -145,6 +166,32 @@ struct WorkflowOverviewPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    private func workflowInfoRow(
+        systemImage: String,
+        title: String,
+        value: String,
+        emphasized: Bool = false
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.subheadline)
+                .foregroundStyle(emphasized ? Color.accentColor : Color.secondary)
+                .frame(width: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(emphasized ? .callout.weight(.semibold) : .callout)
+                    .foregroundStyle(emphasized ? .primary : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("workflow_status_message")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }
 
 struct WorkflowPrimaryActionButton: View {
@@ -158,6 +205,8 @@ struct WorkflowPrimaryActionButton: View {
         switch title {
         case "导出 MP4":
             return "square.and.arrow.up.fill"
+        case "再次导出":
+            return "arrow.clockwise.circle.fill"
         case "导入图片":
             return "photo.badge.plus"
         default:

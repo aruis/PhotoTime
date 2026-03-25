@@ -559,6 +559,9 @@ struct ContentView: View {
         if viewModel.validationMessage != nil {
             return nil
         }
+        if viewModel.hasSuccessCard {
+            return ("再次导出", { viewModel.export() })
+        }
         if !viewModel.hasSuccessCard {
             return ("导出 MP4", { viewModel.export() })
         }
@@ -578,6 +581,8 @@ struct ContentView: View {
         guard let primary = firstRunPrimaryAction else { return nil }
         switch primary.title {
         case "导出 MP4":
+            return viewModel.outputURL == nil ? "请先选择导出路径" : nil
+        case "再次导出":
             return viewModel.outputURL == nil ? "请先选择导出路径" : nil
         case "导入图片":
             return "从本地选择素材，开始生成视频"
