@@ -129,12 +129,10 @@ struct AdvancedSettingsPanel: View {
                             .foregroundStyle(.red)
                     }
                 }
-                if viewModel.config.enableCrossfade && viewModel.config.transitionDuration > 0.001 {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("背景空窗时长: \(viewModel.config.transitionDipDuration, specifier: "%.2f")s")
-                        Slider(value: transitionDipDurationBinding, in: RenderEditorConfig.transitionDipDurationRange, step: 0.01)
-                            .disabled(viewModel.isBusy)
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("背景空窗时长: \(viewModel.config.transitionDipDuration, specifier: "%.2f")s")
+                    Slider(value: transitionDipDurationBinding, in: RenderEditorConfig.transitionDipDurationRange, step: 0.01)
+                        .disabled(viewModel.isBusy)
                 }
                 Picker("Ken Burns", selection: kenBurnsChoiceBinding) {
                     ForEach(KenBurnsChoice.allCases) { choice in

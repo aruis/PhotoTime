@@ -214,18 +214,16 @@ struct SimpleSettingsPanel: View {
                 }
                 .disabled(viewModel.isBusy)
 
-                if viewModel.config.enableCrossfade {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("背景空窗")
-                            .font(.subheadline.weight(.medium))
-                        choiceGrid(
-                            TransitionGapChoice.allCases,
-                            selection: transitionGapBinding,
-                            title: \TransitionGapChoice.title,
-                            subtitle: \TransitionGapChoice.subtitle
-                        )
-                        .disabled(viewModel.isBusy)
-                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("背景空窗")
+                        .font(.subheadline.weight(.medium))
+                    choiceGrid(
+                        TransitionGapChoice.allCases,
+                        selection: transitionGapBinding,
+                        title: \TransitionGapChoice.title,
+                        subtitle: \TransitionGapChoice.subtitle
+                    )
+                    .disabled(viewModel.isBusy)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
