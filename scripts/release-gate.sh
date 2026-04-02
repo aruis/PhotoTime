@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PBXPROJ="$ROOT_DIR/PhotoTime.xcodeproj/project.pbxproj"
+PBXPROJ="$ROOT_DIR/ReelFlow.xcodeproj/project.pbxproj"
 WORKFLOW="$ROOT_DIR/.github/workflows/ci.yml"
 
 echo "[release-gate] checking deployment target..."

@@ -1,6 +1,6 @@
-# PhotoTime
+# ReelFlow
 
-PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
+ReelFlow 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 
 ## 远期目标（可迭代）
 以下目标作为当前版本的长期方向，后续可根据实际进展持续微调。
@@ -145,7 +145,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 3. 完成首用可达成度验证
 - [x] 新用户脚本化走通"导入-预览-导出"并记录阻塞点。
 - [x] 根据阻塞点微调文案与默认值（不做视觉重构）。
-  - 已调整：默认导出路径自动落在"影片/PhotoTime-Output.mp4"，并补充首屏引导文案。
+  - 已调整：默认导出路径自动落在"影片/ReelFlow-Output.mp4"，并补充首屏引导文案。
 
 4. 音频 v1 设计与技术预研
 - [x] 确认最小方案：单轨导入、预览可听、导出混流。
@@ -158,7 +158,7 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
 - [x] 新增关键 UI smoke 脚本：`./scripts/test-ui-smoke.sh`，并提供总门禁脚本 `./scripts/test-ci-gate.sh`。
 - [x] 修复音频时长读取过时 API（`AVURLAsset.duration`）并清理缩略图 actor 警告。
 - [x] 补齐异步音频时长刷新回归测试（导入后可读、移除后清空）。
-- [x] 增加导出失败类型本地聚合统计（`~/Library/Application Support/PhotoTime/Diagnostics/export-failure-stats.json`）。
+- [x] 增加导出失败类型本地聚合统计（`~/Library/Application Support/ReelFlow/Diagnostics/export-failure-stats.json`）。
 - [x] 在应用"更多"菜单增加"导出排障包"入口（生成并打开诊断包目录）。
 - [x] 导出前增加输出路径规范与可写性校验（`.mp4` 扩展名、目录路径、写权限），异常时即时提示并阻断导出。
 
@@ -199,4 +199,4 @@ PhotoTime 是一个面向摄影爱好者的 macOS 幻灯片导出工具。
     - UI Smoke
   - 失败时自动上传 `xcresult` 产物，便于定位问题。
 - 等价 `xcodebuild` 命令（带 ad-hoc 签名，避免本机调试库签名导致的测试启动失败）：
-  - `xcodebuild test -project PhotoTime.xcodeproj -scheme PhotoTime -destination 'platform=macOS' -derivedDataPath .derivedData CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-' -only-testing:PhotoTimeTests`
+  - `xcodebuild test -project ReelFlow.xcodeproj -scheme ReelFlow -destination 'platform=macOS' -derivedDataPath .derivedData CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-' -only-testing:ReelFlowTests`

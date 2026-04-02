@@ -11,8 +11,8 @@
 1. `./scripts/test-ci-gate.sh` (run at 21:18)
 - Result: failed
 - Duration: `real 127.29s`
-- Failure: `PhotoTimeUITests-Runner ... Timed out while enabling automation mode.`
-- XCResult: `.derivedData/Logs/Test/Test-PhotoTime-2026.02.21_21-19-47-+0800.xcresult`
+- Failure: `ReelFlowUITests-Runner ... Timed out while enabling automation mode.`
+- XCResult: `.derivedData/Logs/Test/Test-ReelFlow-2026.02.21_21-19-47-+0800.xcresult`
 
 2. Sequential timing attempts
 - `./scripts/check-maintainability.sh`: passed, `real 0.01s`
@@ -32,16 +32,16 @@ Conclusion:
 
 1. Release build
 - Command:
-  - `xcodebuild build -project PhotoTime.xcodeproj -scheme PhotoTime -configuration Release -destination 'platform=macOS' -derivedDataPath .derivedData-release CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-'`
+  - `xcodebuild build -project ReelFlow.xcodeproj -scheme ReelFlow -configuration Release -destination 'platform=macOS' -derivedDataPath .derivedData-release CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='-'`
 - Result: passed
 - Duration: `real 10.83s`
 
 2. Package artifact
 - Command:
-  - `ditto -c -k --sequesterRsrc --keepParent .derivedData-release/Build/Products/Release/PhotoTime.app artifacts/PhotoTime-Release-local.zip`
+  - `ditto -c -k --sequesterRsrc --keepParent .derivedData-release/Build/Products/Release/ReelFlow.app artifacts/ReelFlow-Release-local.zip`
 - Result: passed
 - Duration: `real 0.05s`
-- Artifact: `artifacts/PhotoTime-Release-local.zip` (`713K`)
+- Artifact: `artifacts/ReelFlow-Release-local.zip` (`713K`)
 - SHA256: `da7e89ef0db8a98153cca6ffe5e6cde2014a5e491f07415666a219b1040e4b73`
 
 3. Artifact verification

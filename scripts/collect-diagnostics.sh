@@ -7,7 +7,7 @@ OUT_BASE="${1:-$ROOT_DIR/.diagnostics}"
 BUNDLE_DIR="$OUT_BASE/phototime-diagnostics-$TS"
 ARCHIVE_PATH="$OUT_BASE/phototime-diagnostics-$TS.tar.gz"
 
-APP_SUPPORT="${HOME}/Library/Application Support/PhotoTime"
+APP_SUPPORT="${HOME}/Library/Application Support/ReelFlow"
 LOG_DIR="$APP_SUPPORT/Logs"
 STATS_FILE="$APP_SUPPORT/Diagnostics/export-failure-stats.json"
 

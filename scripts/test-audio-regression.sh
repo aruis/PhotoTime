@@ -6,13 +6,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 xcodebuild test \
-  -project PhotoTime.xcodeproj \
-  -scheme PhotoTime \
+  -project ReelFlow.xcodeproj \
+  -scheme ReelFlow \
   -destination 'platform=macOS' \
   -derivedDataPath .derivedData \
   CODE_SIGNING_ALLOWED=YES \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY='-' \
-  -only-testing:PhotoTimeTests/RenderEngineSmokeTests/exportPipelineIncludesAudioTrackWhenConfigured \
-  -only-testing:PhotoTimeTests/RenderEngineSmokeTests/exportPipelineKeepsShortAudioWithoutLoop \
-  -only-testing:PhotoTimeTests/RenderEngineSmokeTests/exportPipelineLoopsAudioTrackWhenEnabled
+  -only-testing:ReelFlowTests/RenderEngineSmokeTests/exportPipelineIncludesAudioTrackWhenConfigured \
+  -only-testing:ReelFlowTests/RenderEngineSmokeTests/exportPipelineKeepsShortAudioWithoutLoop \
+  -only-testing:ReelFlowTests/RenderEngineSmokeTests/exportPipelineLoopsAudioTrackWhenEnabled

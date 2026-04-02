@@ -1,4 +1,4 @@
-# PhotoTime Release Checklist
+# ReelFlow Release Checklist
 
 适用范围：发布前分支（`main`）准备阶段。  
 目标：在发版前收口权限、磁盘、兼容性、失败恢复链路的关键风险。

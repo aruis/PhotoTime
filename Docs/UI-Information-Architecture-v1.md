@@ -1,4 +1,4 @@
-# PhotoTime UI Information Architecture v1
+# ReelFlow UI Information Architecture v1
 
 ## Goal
 Freeze UI skeleton before visual redesign, based on stable render/export behavior.
