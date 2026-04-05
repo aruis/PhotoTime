@@ -1,6 +1,11 @@
-import AppKit
 import CoreImage
 import Foundation
+
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 struct ComposedClip {
     let paperImage: CIImage
@@ -25,7 +30,7 @@ final class FrameComposer {
     private let layout: FrameLayout
     private let backgroundImage: CIImage
     private let strokeColor: CGColor
-    private let textColor: NSColor
+    private let textColor: PlatformColor
 
     nonisolated init(settings: RenderSettings) {
         self.settings = settings
@@ -36,7 +41,7 @@ final class FrameComposer {
             blue: CGFloat(settings.canvas.strokeGray),
             alpha: 1
         )
-        self.textColor = NSColor(white: CGFloat(settings.canvas.textGray), alpha: 1)
+        self.textColor = PlatformColor(white: CGFloat(settings.canvas.textGray), alpha: 1)
 
         let bg = CGFloat(settings.canvas.backgroundGray)
         backgroundImage = CIImage(color: CIColor(red: bg, green: bg, blue: bg, alpha: 1))
@@ -256,16 +261,24 @@ final class FrameComposer {
         paragraph.alignment = .left
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: CGFloat(settings.plate.fontSize), weight: .medium),
+            .font: PlatformDrawing.monospacedFont(ofSize: CGFloat(settings.plate.fontSize)),
             .foregroundColor: textColor,
             .paragraphStyle: paragraph
         ]
 
         if settings.plate.enabled {
+            #if canImport(AppKit)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+            #else
+            UIGraphicsPushContext(context)
+            #endif
             (text as NSString).draw(in: plateTextRect, withAttributes: attributes)
+            #if canImport(AppKit)
             NSGraphicsContext.restoreGraphicsState()
+            #else
+            UIGraphicsPopContext()
+            #endif
         }
 
         guard let cgImage = context.makeImage() else {

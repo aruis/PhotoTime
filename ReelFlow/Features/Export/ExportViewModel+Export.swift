@@ -317,7 +317,7 @@ extension ExportViewModel {
             do {
                 let engine = makeEngine(settings)
                 let cgImage = try await engine.previewFrame(imageURLs: urls, at: second)
-                previewImage = NSImage(cgImage: cgImage, size: settings.outputSize)
+                previewImage = cgImage
                 previewStatusMessage = "预览已更新 (\(String(format: "%.2f", second))s)"
                 previewErrorMessage = nil
                 workflow.finishPreviewSuccess()

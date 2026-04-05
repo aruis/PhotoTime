@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 
 @MainActor
@@ -71,7 +70,7 @@ extension ExportViewModel {
                 URL(fileURLWithPath: "/tmp/first-run-b.jpg")
             ]
             outputURL = URL(fileURLWithPath: "/tmp/ReelFlow-FirstRun.mp4")
-            previewImage = NSImage(size: CGSize(width: 320, height: 180))
+            previewImage = PlaceholderImageFactory.makeSolidImage(size: CGSize(width: 320, height: 180))
             previewStatusMessage = "测试场景：预览已就绪"
             workflow.setIdleMessage("测试场景：可直接导出")
         case "preflight_navigation":

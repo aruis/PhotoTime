@@ -133,14 +133,14 @@ struct VideoTimelinePreviewPanel: View {
 
 private extension View {
     func previewSurface(
-        image: NSImage?,
+        image: CGImage?,
         placeholderSystemImage: String,
         placeholderText: String,
         accessibilityIdentifier: String
     ) -> some View {
         Group {
             if let image {
-                Image(nsImage: image)
+                Image(decorative: image, scale: 1)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, minHeight: 280, maxHeight: 420)
