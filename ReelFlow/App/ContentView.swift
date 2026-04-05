@@ -888,7 +888,7 @@ private extension ContentView {
         viewModel.config.audioEnabled = true
         viewModel.config.audioLoopEnabled = true
         viewModel.config.audioFilePath = "/tmp/preview-bgm.m4a"
-        viewModel.previewImage = NSImage(size: CGSize(width: 1440, height: 900))
+        viewModel.previewImage = PlaceholderImageFactory.makeSolidImage(size: CGSize(width: 1440, height: 900))
         viewModel.previewStatusMessage = "预览已更新 (0.00s)"
         viewModel.workflow.setIdleMessage("已就绪，可直接导出 MP4。")
         return viewModel

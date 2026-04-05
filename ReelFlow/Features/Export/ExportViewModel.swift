@@ -1,6 +1,6 @@
-import AppKit
 import AVFoundation
 import Combine
+import CoreGraphics
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -74,7 +74,7 @@ final class ExportViewModel: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     @Published var imageURLs: [URL] = []
     @Published var outputURL: URL?
-    @Published var previewImage: NSImage?
+    @Published var previewImage: CGImage?
     @Published var previewSecond: Double = 0
     @Published var previewStatusMessage: String = "未生成预览"
     @Published var previewErrorMessage: String?

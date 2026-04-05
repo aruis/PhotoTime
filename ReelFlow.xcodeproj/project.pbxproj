@@ -6,6 +6,47 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		0B74344A045495F963747BAC /* sony-alpha-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 3EBD1398DBE4CC8F8FCCDDAE /* sony-alpha-style.m4a */; };
+		15EB5640AAD3AECD3F4F8F73 /* AudioTrackValidation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E59BEF0B7051B28DB211AF1 /* AudioTrackValidation.swift */; };
+		1B549AFBE945729086D28F69 /* hasselblad-500cm-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 63F70B8074FAB5E22AA91381 /* hasselblad-500cm-style.m4a */; };
+		1B6D98B8BAB75A6C89FD663D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CA902F02727E2120660AB669 /* Assets.xcassets */; };
+		1C140140C153EB8EA793DFF1 /* ExportPreflight.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB3E00F75E6A33BCC24A486B /* ExportPreflight.swift */; };
+		1EFB7E9292E483AFEA231B9C /* ExportStatusMessageBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F553CA6C7F282AEDAEBF5116 /* ExportStatusMessageBuilder.swift */; };
+		2AB53D686902EC67594E07CF /* panasonic-lumix-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 6E7AF6E5855A19ACDC47AC11 /* panasonic-lumix-style.m4a */; };
+		524682351E254B6B5B931B5F /* FrameComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DE34D47217A3AEC2D342A5D /* FrameComposer.swift */; };
+		56B9BE48964F57CC571DCAA2 /* leica-m-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 72D5364627EAD925448619DF /* leica-m-style.m4a */; };
+		6065D4AA8564C667DF8B2D11 /* RenderingEngineClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0997F29E013A93976439F688 /* RenderingEngineClient.swift */; };
+		62D76AA01F501588396C1B71 /* PreviewImageBridging.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF571360F8EBDAEAEAF4D861 /* PreviewImageBridging.swift */; };
+		6568995F09E3ADB45011AE5C /* ReelFlowiOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF586714A97FADE68DE84E38 /* ReelFlowiOSApp.swift */; };
+		6926BC1D5AA2EE3039D1D537 /* ImageLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE9ED36A9143C14C352A929F /* ImageLoader.swift */; };
+		6B98317AEC1BA9A1D23B2B96 /* canon-eos-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 3449A73118B6CB2D4292FA93 /* canon-eos-style.m4a */; };
+		6FBCB830701D6741681C5FD8 /* AssetProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8451B93863BE44D09EFAAA49 /* AssetProvider.swift */; };
+		76C51DCC07195678924C1DA2 /* VideoExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 573E6EB02007D7B07F830359 /* VideoExporter.swift */; };
+		8648220B6DE62753AD8B0530 /* ReelFlowiOSRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D583F254AC697BA58C58121A /* ReelFlowiOSRootView.swift */; };
+		872A4603E60ADA947670FE9A /* AudioMuxer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4E94A71371E28436BD5AEB0 /* AudioMuxer.swift */; };
+		8DAF3DFA263825EF69F27511 /* RenderTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CA4A087801A68CF1C382906 /* RenderTypes.swift */; };
+		8E62D097618C3374F8CE19EA /* PlatformDrawing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EB310FE643DCA276D6539F9 /* PlatformDrawing.swift */; };
+		A01FA67288839FD8AEADDED6 /* MemorySnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61B7B0AD2D31358BF1269C39 /* MemorySnapshot.swift */; };
+		A0C2EB2AFD29837236D5259C /* ReelFlowiOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF31AF833626A4EB1931D7D5 /* ReelFlowiOSUITests.swift */; };
+		A8E375AF8490AA41E05AA2E2 /* RenderLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = E61216D4E16ABE8B23BEEB3D /* RenderLogger.swift */; };
+		AF2DA5BBFFC29813096FE436 /* nikon-dslr-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = D5FDB74CCEE4CD3BD5CDDA37 /* nikon-dslr-style.m4a */; };
+		C25FC00C6D2CEA1774408C37 /* IOSExportViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9FD383E5E869717A5444D3 /* IOSExportViewModel.swift */; };
+		C9DF3A950E367A242C822F6F /* ExportRecoveryAdvisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F53C2C998A8E4881641DF3AF /* ExportRecoveryAdvisor.swift */; };
+		CD6D8D58F33E94A82049C0F1 /* MediaPicking.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A168908586E4E79EA85775F /* MediaPicking.swift */; };
+		D02E9CF640B9725C4B7C7FE3 /* ExportFailureContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BDA3F02E43DECB5B33C7220 /* ExportFailureContext.swift */; };
+		D42F178882961C40A2C45BCF /* ShutterSoundCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37BAEFFF973F54A672DBDDD1 /* ShutterSoundCatalog.swift */; };
+		D4C1ED5F6C73714E111A08FB /* ExportDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3847AA9D11A64CC06BF2C2 /* ExportDelivery.swift */; };
+		D9D1105788BE5C49785525E3 /* fujifilm-x-style.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 98ED3E63E143701DE5E10A90 /* fujifilm-x-style.m4a */; };
+		E5DAAF82ADC956CE203CF787 /* ExportWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F578359C01737434E22BEEC7 /* ExportWorkflow.swift */; };
+		EC0D9142EB1D04BE97DCED54 /* ClipCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA384C3D8C92FFF192A04417 /* ClipCache.swift */; };
+		ED40978A79B8B1F67C2AD516 /* RenderEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078E294C5FC8D0DE1C862192 /* RenderEngine.swift */; };
+		F11BDF68332CBB45B0E0099E /* LayoutEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEA073A7461D284438D89BD2 /* LayoutEngine.swift */; };
+		F8CC7B8D5BCFD97F3DB960AD /* ExifParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 486F1D965A423CC81923789B /* ExifParser.swift */; };
+		FB47BF543FB893EBCF9CFA2F /* TimelineEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5EE2992841D0F312E82E9F8 /* TimelineEngine.swift */; };
+		FD7C59377B5CDAA510467178 /* MobileRenderConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AE9AD503153E7129FA7CFC5 /* MobileRenderConfiguration.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		833F5CD82F363B5A0074C27E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,33 +62,109 @@
 			remoteGlobalIDString = 833F5CC92F363B590074C27E;
 			remoteInfo = ReelFlow;
 		};
+		A545A99A2121709B2620FB91 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 833F5CC22F363B590074C27E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 96541C77FC2BF7606B253506;
+			remoteInfo = ReelFlowiOS;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		078E294C5FC8D0DE1C862192 /* RenderEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RenderEngine.swift; path = RenderEngine.swift; sourceTree = "<group>"; };
+		0997F29E013A93976439F688 /* RenderingEngineClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RenderingEngineClient.swift; path = RenderingEngineClient.swift; sourceTree = "<group>"; };
+		0CA4A087801A68CF1C382906 /* RenderTypes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RenderTypes.swift; path = RenderTypes.swift; sourceTree = "<group>"; };
+		0E59BEF0B7051B28DB211AF1 /* AudioTrackValidation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioTrackValidation.swift; path = AudioTrackValidation.swift; sourceTree = "<group>"; };
+		2A168908586E4E79EA85775F /* MediaPicking.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MediaPicking.swift; path = MediaPicking.swift; sourceTree = "<group>"; };
+		3449A73118B6CB2D4292FA93 /* canon-eos-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "canon-eos-style.m4a"; path = "canon-eos-style.m4a"; sourceTree = "<group>"; };
+		37BAEFFF973F54A672DBDDD1 /* ShutterSoundCatalog.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShutterSoundCatalog.swift; path = ShutterSoundCatalog.swift; sourceTree = "<group>"; };
+		3EBD1398DBE4CC8F8FCCDDAE /* sony-alpha-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "sony-alpha-style.m4a"; path = "sony-alpha-style.m4a"; sourceTree = "<group>"; };
+		486F1D965A423CC81923789B /* ExifParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExifParser.swift; path = ExifParser.swift; sourceTree = "<group>"; };
+		573E6EB02007D7B07F830359 /* VideoExporter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VideoExporter.swift; path = VideoExporter.swift; sourceTree = "<group>"; };
+		61B7B0AD2D31358BF1269C39 /* MemorySnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MemorySnapshot.swift; path = MemorySnapshot.swift; sourceTree = "<group>"; };
+		63F70B8074FAB5E22AA91381 /* hasselblad-500cm-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "hasselblad-500cm-style.m4a"; path = "hasselblad-500cm-style.m4a"; sourceTree = "<group>"; };
+		6AE9AD503153E7129FA7CFC5 /* MobileRenderConfiguration.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MobileRenderConfiguration.swift; path = MobileRenderConfiguration.swift; sourceTree = "<group>"; };
+		6E7AF6E5855A19ACDC47AC11 /* panasonic-lumix-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "panasonic-lumix-style.m4a"; path = "panasonic-lumix-style.m4a"; sourceTree = "<group>"; };
+		72D5364627EAD925448619DF /* leica-m-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "leica-m-style.m4a"; path = "leica-m-style.m4a"; sourceTree = "<group>"; };
+		7BDA3F02E43DECB5B33C7220 /* ExportFailureContext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportFailureContext.swift; path = ExportFailureContext.swift; sourceTree = "<group>"; };
+		7EB310FE643DCA276D6539F9 /* PlatformDrawing.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PlatformDrawing.swift; path = PlatformDrawing.swift; sourceTree = "<group>"; };
 		833F5CCA2F363B590074C27E /* ReelFlow.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReelFlow.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		833F5CD72F363B5A0074C27E /* ReelFlowTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReelFlowTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		833F5CE12F363B5A0074C27E /* ReelFlowUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReelFlowUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8451B93863BE44D09EFAAA49 /* AssetProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AssetProvider.swift; path = AssetProvider.swift; sourceTree = "<group>"; };
+		8B3847AA9D11A64CC06BF2C2 /* ExportDelivery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportDelivery.swift; path = ExportDelivery.swift; sourceTree = "<group>"; };
+		98ED3E63E143701DE5E10A90 /* fujifilm-x-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "fujifilm-x-style.m4a"; path = "fujifilm-x-style.m4a"; sourceTree = "<group>"; };
+		9DE34D47217A3AEC2D342A5D /* FrameComposer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FrameComposer.swift; path = FrameComposer.swift; sourceTree = "<group>"; };
+		A5EE2992841D0F312E82E9F8 /* TimelineEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TimelineEngine.swift; path = TimelineEngine.swift; sourceTree = "<group>"; };
+		AB9FD383E5E869717A5444D3 /* IOSExportViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IOSExportViewModel.swift; path = IOSExportViewModel.swift; sourceTree = "<group>"; };
+		B739883C65A513DCEA08C059 /* ReelFlowiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReelFlowiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB3E00F75E6A33BCC24A486B /* ExportPreflight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportPreflight.swift; path = ExportPreflight.swift; sourceTree = "<group>"; };
+		BE9ED36A9143C14C352A929F /* ImageLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImageLoader.swift; path = ImageLoader.swift; sourceTree = "<group>"; };
+		CA902F02727E2120660AB669 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = Assets.xcassets; sourceTree = "<group>"; };
+		CF31AF833626A4EB1931D7D5 /* ReelFlowiOSUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReelFlowiOSUITests.swift; path = ReelFlowiOSUITests.swift; sourceTree = "<group>"; };
+		CF571360F8EBDAEAEAF4D861 /* PreviewImageBridging.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PreviewImageBridging.swift; path = PreviewImageBridging.swift; sourceTree = "<group>"; };
+		CF586714A97FADE68DE84E38 /* ReelFlowiOSApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReelFlowiOSApp.swift; path = ReelFlowiOSApp.swift; sourceTree = "<group>"; };
+		D583F254AC697BA58C58121A /* ReelFlowiOSRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReelFlowiOSRootView.swift; path = ReelFlowiOSRootView.swift; sourceTree = "<group>"; };
+		D5FDB74CCEE4CD3BD5CDDA37 /* nikon-dslr-style.m4a */ = {isa = PBXFileReference; includeInIndex = 1; name = "nikon-dslr-style.m4a"; path = "nikon-dslr-style.m4a"; sourceTree = "<group>"; };
+		DA384C3D8C92FFF192A04417 /* ClipCache.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClipCache.swift; path = ClipCache.swift; sourceTree = "<group>"; };
+		DEA073A7461D284438D89BD2 /* LayoutEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LayoutEngine.swift; path = LayoutEngine.swift; sourceTree = "<group>"; };
+		E61216D4E16ABE8B23BEEB3D /* RenderLogger.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RenderLogger.swift; path = RenderLogger.swift; sourceTree = "<group>"; };
+		F4E94A71371E28436BD5AEB0 /* AudioMuxer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AudioMuxer.swift; path = AudioMuxer.swift; sourceTree = "<group>"; };
+		F53C2C998A8E4881641DF3AF /* ExportRecoveryAdvisor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportRecoveryAdvisor.swift; path = ExportRecoveryAdvisor.swift; sourceTree = "<group>"; };
+		F553CA6C7F282AEDAEBF5116 /* ExportStatusMessageBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportStatusMessageBuilder.swift; path = ExportStatusMessageBuilder.swift; sourceTree = "<group>"; };
+		F578359C01737434E22BEEC7 /* ExportWorkflow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExportWorkflow.swift; path = ExportWorkflow.swift; sourceTree = "<group>"; };
+		F914D45DE81519E4E9A1BFE8 /* MobileRenderConfigurationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MobileRenderConfigurationTests.swift; path = MobileRenderConfigurationTests.swift; sourceTree = "<group>"; };
+		FA2DFBDF953B30EC27DF587D /* ReelFlowiOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReelFlowiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB6E542A5E0ACC5170482CF8 /* PlaceholderImageFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PlaceholderImageFactory.swift; path = PlaceholderImageFactory.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		833F5CCC2F363B590074C27E /* ReelFlow */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			children = (
+				CDF4119E7033600381152034 /* Features */,
+				680F8E98FFEA5D76C8FB51DF /* RenderEngine */,
+				2ACB351884C9008F17ADD595 /* ShutterSounds */,
+				7470CFEA53FFE6E00A6388CF /* Support */,
+			);
 			path = ReelFlow;
 			sourceTree = "<group>";
 		};
 		833F5CDA2F363B5A0074C27E /* ReelFlowTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			children = (
+				C45F6660381282DB0F29988C /* Features */,
+			);
 			path = ReelFlowTests;
 			sourceTree = "<group>";
 		};
 		833F5CE42F363B5A0074C27E /* ReelFlowUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			children = (
+			);
 			path = ReelFlowUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0E8909C163D8C9EF93D90806 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0C0C726A58036891E1D9B377 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6A72ED5806ED998A6B1C86F7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F50FEF44FE52B0FDACD2DD4E /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		833F5CC72F363B590074C27E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -72,6 +189,117 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2ACB351884C9008F17ADD595 /* ShutterSounds */ = {
+			isa = PBXGroup;
+			children = (
+				3449A73118B6CB2D4292FA93 /* canon-eos-style.m4a */,
+				98ED3E63E143701DE5E10A90 /* fujifilm-x-style.m4a */,
+				63F70B8074FAB5E22AA91381 /* hasselblad-500cm-style.m4a */,
+				72D5364627EAD925448619DF /* leica-m-style.m4a */,
+				D5FDB74CCEE4CD3BD5CDDA37 /* nikon-dslr-style.m4a */,
+				6E7AF6E5855A19ACDC47AC11 /* panasonic-lumix-style.m4a */,
+				3EBD1398DBE4CC8F8FCCDDAE /* sony-alpha-style.m4a */,
+			);
+			name = ShutterSounds;
+			path = ShutterSounds;
+			sourceTree = "<group>";
+		};
+		3430D9F54C366B1B769056D7 /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				F914D45DE81519E4E9A1BFE8 /* MobileRenderConfigurationTests.swift */,
+			);
+			name = Export;
+			path = Export;
+			sourceTree = "<group>";
+		};
+		55E3FD31204853CE06150504 /* ReelFlowiOSUITests */ = {
+			isa = PBXGroup;
+			children = (
+				CF31AF833626A4EB1931D7D5 /* ReelFlowiOSUITests.swift */,
+			);
+			name = ReelFlowiOSUITests;
+			path = ReelFlowiOSUITests;
+			sourceTree = "<group>";
+		};
+		60B93FD48927C9E6D4134098 /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				8B3847AA9D11A64CC06BF2C2 /* ExportDelivery.swift */,
+				2A168908586E4E79EA85775F /* MediaPicking.swift */,
+				CF571360F8EBDAEAEAF4D861 /* PreviewImageBridging.swift */,
+			);
+			name = Platform;
+			path = Platform;
+			sourceTree = "<group>";
+		};
+		6763C807A8D70671C72861B6 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				CF586714A97FADE68DE84E38 /* ReelFlowiOSApp.swift */,
+				D583F254AC697BA58C58121A /* ReelFlowiOSRootView.swift */,
+			);
+			name = App;
+			path = App;
+			sourceTree = "<group>";
+		};
+		67F5A5181F6042588F83B191 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				AB9FD383E5E869717A5444D3 /* IOSExportViewModel.swift */,
+			);
+			name = Features;
+			path = Features;
+			sourceTree = "<group>";
+		};
+		680F8E98FFEA5D76C8FB51DF /* RenderEngine */ = {
+			isa = PBXGroup;
+			children = (
+				8451B93863BE44D09EFAAA49 /* AssetProvider.swift */,
+				F4E94A71371E28436BD5AEB0 /* AudioMuxer.swift */,
+				DA384C3D8C92FFF192A04417 /* ClipCache.swift */,
+				486F1D965A423CC81923789B /* ExifParser.swift */,
+				9DE34D47217A3AEC2D342A5D /* FrameComposer.swift */,
+				BE9ED36A9143C14C352A929F /* ImageLoader.swift */,
+				DEA073A7461D284438D89BD2 /* LayoutEngine.swift */,
+				61B7B0AD2D31358BF1269C39 /* MemorySnapshot.swift */,
+				7EB310FE643DCA276D6539F9 /* PlatformDrawing.swift */,
+				078E294C5FC8D0DE1C862192 /* RenderEngine.swift */,
+				E61216D4E16ABE8B23BEEB3D /* RenderLogger.swift */,
+				0CA4A087801A68CF1C382906 /* RenderTypes.swift */,
+				0997F29E013A93976439F688 /* RenderingEngineClient.swift */,
+				A5EE2992841D0F312E82E9F8 /* TimelineEngine.swift */,
+				573E6EB02007D7B07F830359 /* VideoExporter.swift */,
+			);
+			name = RenderEngine;
+			path = RenderEngine;
+			sourceTree = "<group>";
+		};
+		7470CFEA53FFE6E00A6388CF /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				FB6E542A5E0ACC5170482CF8 /* PlaceholderImageFactory.swift */,
+			);
+			name = Support;
+			path = Support;
+			sourceTree = "<group>";
+		};
+		81E5A9C92FA7BA29E88F7C2E /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				0E59BEF0B7051B28DB211AF1 /* AudioTrackValidation.swift */,
+				7BDA3F02E43DECB5B33C7220 /* ExportFailureContext.swift */,
+				BB3E00F75E6A33BCC24A486B /* ExportPreflight.swift */,
+				F53C2C998A8E4881641DF3AF /* ExportRecoveryAdvisor.swift */,
+				F553CA6C7F282AEDAEBF5116 /* ExportStatusMessageBuilder.swift */,
+				F578359C01737434E22BEEC7 /* ExportWorkflow.swift */,
+				6AE9AD503153E7129FA7CFC5 /* MobileRenderConfiguration.swift */,
+				37BAEFFF973F54A672DBDDD1 /* ShutterSoundCatalog.swift */,
+			);
+			name = Export;
+			path = Export;
+			sourceTree = "<group>";
+		};
 		833F5CC12F363B590074C27E = {
 			isa = PBXGroup;
 			children = (
@@ -79,6 +307,8 @@
 				833F5CDA2F363B5A0074C27E /* ReelFlowTests */,
 				833F5CE42F363B5A0074C27E /* ReelFlowUITests */,
 				833F5CCB2F363B590074C27E /* Products */,
+				94512DB12B4A6C4EDCFC2E41 /* ReelFlowiOS */,
+				55E3FD31204853CE06150504 /* ReelFlowiOSUITests */,
 			);
 			sourceTree = "<group>";
 		};
@@ -88,8 +318,40 @@
 				833F5CCA2F363B590074C27E /* ReelFlow.app */,
 				833F5CD72F363B5A0074C27E /* ReelFlowTests.xctest */,
 				833F5CE12F363B5A0074C27E /* ReelFlowUITests.xctest */,
+				B739883C65A513DCEA08C059 /* ReelFlowiOS.app */,
+				FA2DFBDF953B30EC27DF587D /* ReelFlowiOSUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		94512DB12B4A6C4EDCFC2E41 /* ReelFlowiOS */ = {
+			isa = PBXGroup;
+			children = (
+				6763C807A8D70671C72861B6 /* App */,
+				67F5A5181F6042588F83B191 /* Features */,
+				60B93FD48927C9E6D4134098 /* Platform */,
+				CA902F02727E2120660AB669 /* Assets.xcassets */,
+			);
+			name = ReelFlowiOS;
+			path = ReelFlowiOS;
+			sourceTree = "<group>";
+		};
+		C45F6660381282DB0F29988C /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				3430D9F54C366B1B769056D7 /* Export */,
+			);
+			name = Features;
+			path = Features;
+			sourceTree = "<group>";
+		};
+		CDF4119E7033600381152034 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				81E5A9C92FA7BA29E88F7C2E /* Export */,
+			);
+			name = Features;
+			path = Features;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -108,11 +370,9 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				833F5CCC2F363B590074C27E /* ReelFlow */,
+				833F5CCC2F363B590074C27E,
 			);
 			name = ReelFlow;
-			packageProductDependencies = (
-			);
 			productName = ReelFlow;
 			productReference = 833F5CCA2F363B590074C27E /* ReelFlow.app */;
 			productType = "com.apple.product-type.application";
@@ -131,11 +391,9 @@
 				833F5CD92F363B5A0074C27E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				833F5CDA2F363B5A0074C27E /* ReelFlowTests */,
+				833F5CDA2F363B5A0074C27E,
 			);
 			name = ReelFlowTests;
-			packageProductDependencies = (
-			);
 			productName = ReelFlowTests;
 			productReference = 833F5CD72F363B5A0074C27E /* ReelFlowTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -154,13 +412,46 @@
 				833F5CE32F363B5A0074C27E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				833F5CE42F363B5A0074C27E /* ReelFlowUITests */,
+				833F5CE42F363B5A0074C27E,
 			);
 			name = ReelFlowUITests;
-			packageProductDependencies = (
-			);
 			productName = ReelFlowUITests;
 			productReference = 833F5CE12F363B5A0074C27E /* ReelFlowUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		96541C77FC2BF7606B253506 /* ReelFlowiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 816B098F1D9D857B1F0B4436 /* Build configuration list for PBXNativeTarget "ReelFlowiOS" */;
+			buildPhases = (
+				AD7A0AC5B961CE5225650310 /* Sources */,
+				0E8909C163D8C9EF93D90806 /* Frameworks */,
+				FD908C3CC5CA39F2B0F97B7C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ReelFlowiOS;
+			productName = ReelFlowiOS;
+			productReference = B739883C65A513DCEA08C059 /* ReelFlowiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F12A0E07F3DE8811497C476F /* ReelFlowiOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 89B89FA39F27C72E44182093 /* Build configuration list for PBXNativeTarget "ReelFlowiOSUITests" */;
+			buildPhases = (
+				D32C7E3E458CBE2C8498DCF3 /* Sources */,
+				6A72ED5806ED998A6B1C86F7 /* Frameworks */,
+				9211A38562C068BF796BCD60 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A7B8A09212E2DB157F1A593F /* PBXTargetDependency */,
+			);
+			name = ReelFlowiOSUITests;
+			productName = ReelFlowiOSUITests;
+			productReference = FA2DFBDF953B30EC27DF587D /* ReelFlowiOSUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -203,6 +494,8 @@
 				833F5CC92F363B590074C27E /* ReelFlow */,
 				833F5CD62F363B5A0074C27E /* ReelFlowTests */,
 				833F5CE02F363B5A0074C27E /* ReelFlowUITests */,
+				96541C77FC2BF7606B253506 /* ReelFlowiOS */,
+				F12A0E07F3DE8811497C476F /* ReelFlowiOSUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -226,6 +519,28 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9211A38562C068BF796BCD60 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FD908C3CC5CA39F2B0F97B7C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B6D98B8BAB75A6C89FD663D /* Assets.xcassets in Resources */,
+				6B98317AEC1BA9A1D23B2B96 /* canon-eos-style.m4a in Resources */,
+				D9D1105788BE5C49785525E3 /* fujifilm-x-style.m4a in Resources */,
+				1B549AFBE945729086D28F69 /* hasselblad-500cm-style.m4a in Resources */,
+				56B9BE48964F57CC571DCAA2 /* leica-m-style.m4a in Resources */,
+				AF2DA5BBFFC29813096FE436 /* nikon-dslr-style.m4a in Resources */,
+				2AB53D686902EC67594E07CF /* panasonic-lumix-style.m4a in Resources */,
+				0B74344A045495F963747BAC /* sony-alpha-style.m4a in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -253,6 +568,50 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AD7A0AC5B961CE5225650310 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				15EB5640AAD3AECD3F4F8F73 /* AudioTrackValidation.swift in Sources */,
+				D02E9CF640B9725C4B7C7FE3 /* ExportFailureContext.swift in Sources */,
+				1C140140C153EB8EA793DFF1 /* ExportPreflight.swift in Sources */,
+				C9DF3A950E367A242C822F6F /* ExportRecoveryAdvisor.swift in Sources */,
+				1EFB7E9292E483AFEA231B9C /* ExportStatusMessageBuilder.swift in Sources */,
+				E5DAAF82ADC956CE203CF787 /* ExportWorkflow.swift in Sources */,
+				FD7C59377B5CDAA510467178 /* MobileRenderConfiguration.swift in Sources */,
+				D42F178882961C40A2C45BCF /* ShutterSoundCatalog.swift in Sources */,
+				6FBCB830701D6741681C5FD8 /* AssetProvider.swift in Sources */,
+				872A4603E60ADA947670FE9A /* AudioMuxer.swift in Sources */,
+				EC0D9142EB1D04BE97DCED54 /* ClipCache.swift in Sources */,
+				F8CC7B8D5BCFD97F3DB960AD /* ExifParser.swift in Sources */,
+				524682351E254B6B5B931B5F /* FrameComposer.swift in Sources */,
+				6926BC1D5AA2EE3039D1D537 /* ImageLoader.swift in Sources */,
+				F11BDF68332CBB45B0E0099E /* LayoutEngine.swift in Sources */,
+				A01FA67288839FD8AEADDED6 /* MemorySnapshot.swift in Sources */,
+				8E62D097618C3374F8CE19EA /* PlatformDrawing.swift in Sources */,
+				ED40978A79B8B1F67C2AD516 /* RenderEngine.swift in Sources */,
+				A8E375AF8490AA41E05AA2E2 /* RenderLogger.swift in Sources */,
+				8DAF3DFA263825EF69F27511 /* RenderTypes.swift in Sources */,
+				6065D4AA8564C667DF8B2D11 /* RenderingEngineClient.swift in Sources */,
+				FB47BF543FB893EBCF9CFA2F /* TimelineEngine.swift in Sources */,
+				76C51DCC07195678924C1DA2 /* VideoExporter.swift in Sources */,
+				6568995F09E3ADB45011AE5C /* ReelFlowiOSApp.swift in Sources */,
+				8648220B6DE62753AD8B0530 /* ReelFlowiOSRootView.swift in Sources */,
+				C25FC00C6D2CEA1774408C37 /* IOSExportViewModel.swift in Sources */,
+				D4C1ED5F6C73714E111A08FB /* ExportDelivery.swift in Sources */,
+				CD6D8D58F33E94A82049C0F1 /* MediaPicking.swift in Sources */,
+				62D76AA01F501588396C1B71 /* PreviewImageBridging.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D32C7E3E458CBE2C8498DCF3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0C2EB2AFD29837236D5259C /* ReelFlowiOSUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -266,9 +625,44 @@
 			target = 833F5CC92F363B590074C27E /* ReelFlow */;
 			targetProxy = 833F5CE22F363B5A0074C27E /* PBXContainerItemProxy */;
 		};
+		A7B8A09212E2DB157F1A593F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ReelFlowiOS;
+			target = 96541C77FC2BF7606B253506 /* ReelFlowiOS */;
+			targetProxy = A545A99A2121709B2620FB91 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		09F1B71DEE16F66CA978A1F5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "ReelFlow iOS";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlowiOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		833F5CE92F363B5A0074C27E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -408,6 +802,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ReelFlow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -416,7 +811,6 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MARKETING_VERSION = 1.0;
-				INFOPLIST_KEY_CFBundleDisplayName = ReelFlow;
 				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlow;
 				PRODUCT_MODULE_NAME = ReelFlow;
 				PRODUCT_NAME = ReelFlow;
@@ -445,6 +839,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ReelFlow;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -453,7 +848,6 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.6;
 				MARKETING_VERSION = 1.0;
-				INFOPLIST_KEY_CFBundleDisplayName = ReelFlow;
 				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlow;
 				PRODUCT_MODULE_NAME = ReelFlow;
 				PRODUCT_NAME = ReelFlow;
@@ -551,9 +945,81 @@
 			};
 			name = Release;
 		};
+		83669D786282C0BA21144F1E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlowiOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ReelFlowiOS;
+			};
+			name = Debug;
+		};
+		848A944A021ADDB42CB3C62D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlowiOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ReelFlowiOS;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		E86C9FAF76271A3F501F2BC1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "ReelFlow iOS";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.ximatai.ReelFlowiOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		816B098F1D9D857B1F0B4436 /* Build configuration list for PBXNativeTarget "ReelFlowiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				09F1B71DEE16F66CA978A1F5 /* Release */,
+				E86C9FAF76271A3F501F2BC1 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		833F5CC52F363B590074C27E /* Build configuration list for PBXProject "ReelFlow" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -586,6 +1052,15 @@
 			buildConfigurations = (
 				833F5CF22F363B5A0074C27E /* Debug */,
 				833F5CF32F363B5A0074C27E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		89B89FA39F27C72E44182093 /* Build configuration list for PBXNativeTarget "ReelFlowiOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				848A944A021ADDB42CB3C62D /* Release */,
+				83669D786282C0BA21144F1E /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
